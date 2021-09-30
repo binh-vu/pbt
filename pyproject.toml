@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "polyrepo-bt"
+version = "1.5.3"
+description = "A build tool for poetry packages (living in submodules of a Git repo)"
+authors = ["Binh Vu <binh@toan2.com>"]
+license = "MIT"
+packages = [
+    { include = "pbt" }
+]
+
+[tool.poetry.scripts]
+pbt = 'pbt.cli:cli'
+
+[tool.poetry.dependencies]
+python = "^3.8"
+orjson = "^3.6.3"
+toml = "^0.10.2"
+graphlib_backport = {version = "^1.0.0", python = "<3.9"}
+rocksdb = "^0.7.0"
+semver = "^2.13.0"
+pytest-mock = "^3.6.1"
+loguru = "^0.5.3"
+poetry = "^1.1.8"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
