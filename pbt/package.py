@@ -41,7 +41,7 @@ class Package:
     # list of packages that use the current package
     invert_inter_dependencies: List["Package"]
 
-    def build(self, cfg: PBTConfig) -> bool:
+    def build(self, cfg: PBTConfig, verbose: bool = False) -> bool:
         """Build the package if needed"""
         # check if package has been modified since the last built
         whl_file = self.get_wheel_file()
@@ -55,16 +55,22 @@ class Package:
                     return False
 
             try:
-                self._build()
+                self._build(verbose=verbose)
             finally:
                 diff.save(db)
             return True
 
-    def _build(self):
+    def _build(self, verbose: bool = False):
         logger.info("Build package {}", self.name)
         if (self.dir / "dist").exists():
             shutil.rmtree(str(self.dir / "dist"))
-        subprocess.check_output(["poetry", "build"], cwd=str(self.dir))
+
+        if verbose:
+            call = subprocess.check_call
+        else:
+            call = subprocess.check_output
+
+        call(["poetry", "build"], cwd=str(self.dir))
 
     def publish(self):
         self.pkg_handler.publish()
@@ -88,10 +94,16 @@ class Package:
         cfg: PBTConfig,
         editable: bool = False,
         no_build: bool = False,
+        verbose: bool = False,
     ):
         """Install the `package` in the virtual environment of this package (`self`) (i.e., install dependency)"""
         if not no_build:
-            package.build(cfg)
+            package.build(cfg, verbose)
+
+        if verbose:
+            call = subprocess.check_call
+        else:
+            call = subprocess.check_output
 
         logger.info(
             "Current package {}: install dependency {}", self.name, package.name
@@ -100,7 +112,7 @@ class Package:
         # need to remove the `.egg-info` folders first as it will interfere with the version (ContextualVersionConflict)
         for eggdir in glob(str(self.dir / "*.egg-info")):
             shutil.rmtree(eggdir)
-        subprocess.check_output([pipfile, "uninstall", "-y", package.name])
+        call([pipfile, "uninstall", "-y", package.name])
 
         if editable:
             with tarfile.open(package.get_tar_file(), "r") as g:
@@ -113,7 +125,7 @@ class Package:
                     package.dir / "pyproject.toml", package.dir / "pyproject.toml.tmp"
                 )
             try:
-                subprocess.check_output([pipfile, "install", "-e", "."], cwd=package.dir)
+                call([pipfile, "install", "-e", "."], cwd=package.dir)
             finally:
                 if rename:
                     os.rename(
@@ -122,10 +134,10 @@ class Package:
                     )
                 os.remove(package.dir / "setup.py")
         else:
-            subprocess.check_output([pipfile, "install", package.get_wheel_file()])
+            call([pipfile, "install", package.get_wheel_file()])
 
-    def install(self, without_inter_dependency: bool = True):
-        self.pkg_handler.install(without_inter_dependency)
+    def install(self, without_inter_dependency: bool = True, verbose: bool = False):
+        self.pkg_handler.install(without_inter_dependency, verbose)
 
     def reload(self):
         pkg = load_package(self.dir)
@@ -288,6 +300,7 @@ def load_package(pkg_dir: Path) -> Package:
             pkg_name = project_cfg["tool"]["poetry"]["name"]
             pkg_version = project_cfg["tool"]["poetry"]["version"]
             pkg_dependencies = project_cfg["tool"]["poetry"]["dependencies"]
+            pkg_dependencies.update(project_cfg["tool"]["poetry"]["dev-dependencies"])
 
             # see https://python-poetry.org/docs/pyproject/#include-and-exclude
             # and https://python-poetry.org/docs/pyproject/#packages

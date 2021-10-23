@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "polyrepo-bt"
-version = "1.5.3"
+version = "1.6.0"
 description = "A build tool for poetry packages (living in submodules of a Git repo)"
 authors = ["Binh Vu <binh@toan2.com>"]
 license = "MIT"

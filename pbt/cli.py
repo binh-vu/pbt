@@ -42,7 +42,20 @@ def cli():
     help="Whether to force reinstall the dependencies",
 )
 @click.option("--cwd", default="", help="Override current working directory")
-def make(package: List[str], install: bool = False, editable: bool = False, force: bool = False, cwd: str = ""):
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="increase verbosity",
+)
+def make(
+    package: List[str],
+    install: bool = False,
+    editable: bool = False,
+    force: bool = False,
+    cwd: str = "",
+    verbose: bool = False,
+):
     """Make package"""
     pbt_cfg = PBTConfig.from_dir(cwd)
     packages = search_packages(pbt_cfg)
@@ -64,7 +77,7 @@ def make(package: List[str], install: bool = False, editable: bool = False, forc
         pkg = packages[pkg_name]
         if install:
             logger.debug("Install {} external dependencies", pkg_name)
-            pkg.install(without_inter_dependency=True)
+            pkg.install(without_inter_dependency=True, verbose=verbose)
 
         dep_pkgs = pkg.all_inter_dependencies()
         update_versions(set(dep_pkgs.keys()).difference(updated_version_pkgs), packages)
@@ -80,7 +93,11 @@ def make(package: List[str], install: bool = False, editable: bool = False, forc
                         pkg.update_package_version(dep_pkgs[dep_name])
             if built_pkgs[dep_name] or force:
                 pkg.install_dep(
-                    dep_pkgs[dep_name], pbt_cfg, editable=editable, no_build=True
+                    dep_pkgs[dep_name],
+                    pbt_cfg,
+                    editable=editable,
+                    no_build=True,
+                    verbose=verbose,
                 )
     return
 
@@ -158,7 +175,7 @@ def publish(package: str, cwd: str = ""):
 
 @click.command()
 @click.option("--cwd", default="", help="Override current working directory")
-@click.argument('subcommand')
+@click.argument("subcommand")
 def git(cwd: str, subcommand: Literal["snapshot"]):
     """Execute Git commands in a super-project"""
     pbt_cfg = PBTConfig.from_dir(cwd)
@@ -171,16 +188,25 @@ def git(cwd: str, subcommand: Literal["snapshot"]):
         for dir in pbt_cfg.cwd.iterdir():
             if not dir.is_dir():
                 continue
-            superdir = subprocess.check_output([
-                "git", "rev-parse", "--show-superproject-working-tree"
-            ], cwd=str(dir)).decode().strip()
+            superdir = (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--show-superproject-working-tree"],
+                    cwd=str(dir),
+                )
+                .decode()
+                .strip()
+            )
             if superdir == cwd:
                 submodules.append(dir)
 
         for submodule_dir in submodules:
-            branch = subprocess.check_output([
-                "git", "rev-parse", "--abbrev-ref", "HEAD"
-            ], cwd=submodule_dir).decode().strip()
+            branch = (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=submodule_dir
+                )
+                .decode()
+                .strip()
+            )
             print(f"bash -c 'cd {submodule_dir}; git checkout {branch}; git pull'")
     else:
         raise Exception(f"Invalid subcommand: {subcommand}")

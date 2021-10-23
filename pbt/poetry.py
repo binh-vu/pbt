@@ -70,14 +70,19 @@ class Poetry:
     def python_path(self) -> Path:
         return self.env_path / "bin/python"
 
-    def install(self, without_inter_dependency: bool = True):
+    def install(self, without_inter_dependency: bool = True, verbose: bool = False):
+        if verbose:
+            call = subprocess.check_call
+        else:
+            call = subprocess.check_output
+
         if without_inter_dependency:
             with self.temporary_mask(
                 [dep_pkg.name for dep_pkg in self.package.inter_dependencies]
             ):
-                subprocess.check_output(["poetry", "install"], cwd=self.package.dir)
+                call(["poetry", "install"], cwd=self.package.dir)
         else:
-            subprocess.check_output(["poetry", "install"], cwd=self.package.dir)
+            call(["poetry", "install"], cwd=self.package.dir)
 
     def publish(self):
         subprocess.check_output(["poetry", "publish", "--build"], cwd=self.package.dir)
