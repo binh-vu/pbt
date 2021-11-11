@@ -126,8 +126,38 @@ class Git:
         return branches
 
     @classmethod
+    def auto_checkout_branch(cls, cwd: PathOrStr):
+        commit_id = Git.get_current_commit(cwd)
+        branches = Git.get_branches_contain_commit(cwd, commit_id)
+
+        # select branch to checkout to, prefer development branch as we want to
+        # resume previous work
+        names = {branch.get_name() for branch in branches}
+        if len(names.difference(["master", "main"])) > 0:
+            name = list(names.difference(["master", "main"]))[0]
+        else:
+            name = "master" if "master" in names else "main"
+
+        brs = [branch for branch in branches if branch.get_name() == name]
+        has_local = any(br.is_local() for br in brs)
+        if has_local:
+            Git.checkout_branch(cwd, name)
+        else:
+            Git.checkout_branch(cwd, name, create=True)
+
+    @classmethod
     def init(cls, cwd: PathOrStr):
         subprocess.check_output(["git", "init"], cwd=cwd)
+
+    @classmethod
+    def pull(cls, cwd: PathOrStr, verbose: bool = False):
+        if verbose:
+            fn = subprocess.check_call
+        else:
+            fn = subprocess.check_output
+
+        fn(["git", "pull"], cwd=cwd)
+        fn(["git", "submodule", "update", "--init", "--recursive"], cwd=cwd)
 
     @classmethod
     def commit_all(cls, cwd: PathOrStr, msg: str = "add all files"):

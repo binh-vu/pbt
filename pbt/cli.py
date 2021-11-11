@@ -223,6 +223,8 @@ def publish(package: str, cwd: str = ""):
 @click.argument("subcommand")
 def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
     """Execute Git commands in a super-project"""
+    cwd = os.path.abspath(cwd)
+    
     if subcommand == "clone":
         assert repo.endswith(".git"), f"Invalid repository: `{repo}`"
 
@@ -231,23 +233,12 @@ def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
 
         # checkout the submodule to the correct branch
         for submodule in Git.find_submodules(repo_dir):
-            commit_id = Git.get_current_commit(submodule)
-            branches = Git.get_branches_contain_commit(submodule, commit_id)
-
-            # select branch to checkout to, prefer development branch as we want to
-            # resume previous work
-            names = {branch.get_name() for branch in branches}
-            if len(names.difference(["master", "main"])) > 0:
-                name = list(names.difference(["master", "main"]))[0]
-            else:
-                name = "master" if "master" in names else "main"
-
-            brs = [branch for branch in branches if branch.get_name() == name]
-            has_local = any(br.is_local() for br in brs)
-            if has_local:
-                Git.checkout_branch(submodule, name)
-            else:
-                Git.checkout_branch(submodule, name, create=True)
+            Git.auto_checkout_branch(submodule)
+    elif subcommand == "update":
+        Git.pull(cwd)
+        # checkout the submodule to the correct branch
+        for submodule in Git.find_submodules(cwd):
+            Git.auto_checkout_branch(submodule) 
     elif subcommand == "snapshot":
         pbt_cfg = PBTConfig.from_dir(cwd)
         cwd = str(pbt_cfg.cwd.absolute())
