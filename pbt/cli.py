@@ -183,7 +183,7 @@ def publish(package: str, cwd: str = ""):
 @click.option(
     "--repo", default="", help="Specify the poly-repository that we are working with."
 )
-@click.option("--cwd", default="", help="Override current working directory")
+@click.option("--cwd", default=".", help="Override current working directory")
 @click.argument("subcommand")
 def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
     """Execute Git commands in a super-project"""
