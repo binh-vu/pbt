@@ -93,12 +93,14 @@ class Git:
         return subprocess.check_output(["git", "branch", "--list", branch], cwd=cwd).decode().strip() == branch
 
     @classmethod
-    def checkout_branch(cls, cwd: PathOrStr, branch: str, create: bool = False):
+    def checkout_branch(cls, cwd: PathOrStr, branch: str, create: bool = False, remote: Optional[str] = None):
         if not create:
             # exist local branch
             cmd = ["git", "checkout", branch]
         else:
             cmd = ["git", "checkout", "-b", branch]
+            if remote is not None:
+                cmd += ["--track", f"{remote}/{branch}"]
         subprocess.check_call(cmd, cwd=cwd)
 
     @classmethod
@@ -174,7 +176,7 @@ class Git:
                 Git.checkout_branch(cwd, name)
                 Git.pull(cwd, remote=remote)
             else:
-                Git.checkout_branch(cwd, name, create=True)
+                Git.checkout_branch(cwd, name, create=True, remote=remote)
 
     @classmethod
     def init(cls, cwd: PathOrStr):
