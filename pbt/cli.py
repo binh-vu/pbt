@@ -1,6 +1,10 @@
+from collections import defaultdict
+import os
+from pathlib import Path
 import subprocess
 
 import click
+import importlib.metadata
 from typing import List, Literal
 
 from loguru import logger
@@ -8,10 +12,12 @@ from loguru import logger
 from pbt.config import PBTConfig
 from pbt.diff import RemoteDiff
 from pbt.package import search_packages, topological_sort, update_versions
+from pbt.git import Git
 from pbt.pypi import PyPI
 
 
 @click.group()
+@click.version_option(importlib.metadata.version("polyrepo-bt"))
 def cli():
     pass
 
@@ -174,39 +180,45 @@ def publish(package: str, cwd: str = ""):
 
 
 @click.command()
+@click.option(
+    "--repo", default="", help="Specify the poly-repository that we are working with."
+)
 @click.option("--cwd", default="", help="Override current working directory")
 @click.argument("subcommand")
-def git(cwd: str, subcommand: Literal["snapshot"]):
+def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
     """Execute Git commands in a super-project"""
-    pbt_cfg = PBTConfig.from_dir(cwd)
-    cwd = str(pbt_cfg.cwd.absolute())
+    if subcommand == "clone":
+        assert repo.endswith(".git"), f"Invalid repository: `{repo}`"
 
-    if subcommand == "snapshot":
-        # save current branch status of each
-        submodules = []
+        # clone repository
+        repo_dir = Git.clone_all(repo, cwd)
 
-        for dir in pbt_cfg.cwd.iterdir():
-            if not dir.is_dir():
-                continue
-            superdir = (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--show-superproject-working-tree"],
-                    cwd=str(dir),
-                )
-                .decode()
-                .strip()
-            )
-            if superdir == cwd:
-                submodules.append(dir)
+        # checkout the submodule to the correct branch
+        for submodule in Git.find_submodules(repo_dir):
+            commit_id = Git.get_current_commit(submodule)
+            branches = Git.get_branches_contain_commit(submodule, commit_id)
 
-        for submodule_dir in submodules:
-            branch = (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=submodule_dir
-                )
-                .decode()
-                .strip()
-            )
+            # select branch to checkout to, prefer development branch as we want to
+            # resume previous work
+            names = {branch.get_name() for branch in branches}
+            if len(names.difference(["master", "main"])) > 0:
+                name = list(names.difference(["master", "main"]))[0]
+            else:
+                name = "master" if "master" in names else "main"
+
+            brs = [branch for branch in branches if branch.get_name() == name]
+            has_local = any(br.is_local() for br in brs)
+            if has_local:
+                Git.checkout_branch(submodule, name)
+            else:
+                Git.checkout_branch(submodule, name, create=True)
+    elif subcommand == "snapshot":
+        pbt_cfg = PBTConfig.from_dir(cwd)
+        cwd = str(pbt_cfg.cwd.absolute())
+
+        for submodule_dir in Git.find_submodules(cwd):
+            # get the current branch
+            branch = Git.get_current_branch(submodule_dir)
             print(f"bash -c 'cd {submodule_dir}; git checkout {branch}; git pull'")
     else:
         raise Exception(f"Invalid subcommand: {subcommand}")

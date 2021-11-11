@@ -1,7 +1,8 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Set
+from typing import Set, Union
+from loguru import logger
 
 import orjson
 
@@ -16,8 +17,8 @@ class PBTConfig:
     ignore_packages: Set[str]
 
     @staticmethod
-    def from_dir(cwd: str) -> "PBTConfig":
-        def is_valid_cwd(wd: str):
+    def from_dir(cwd: Union[Path, str]) -> "PBTConfig":
+        def is_valid_cwd(wd: Union[Path, str]):
             pbt_file = os.path.join(wd, PBT_CONFIG_FILE_NAME)
             return os.path.exists(pbt_file)
 
@@ -47,6 +48,7 @@ class PBTConfig:
         with open(str(cwd / PBT_CONFIG_FILE_NAME), "r") as f:
             cfg = orjson.loads(f.read())
 
+        logger.info("Root directory: {}", cwd)
         return PBTConfig(
             cwd=cwd,
             ignore_packages=set(cfg.get("ignore_packages", [])),
