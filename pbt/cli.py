@@ -1,18 +1,18 @@
-from collections import defaultdict
-import os
-from pathlib import Path
-import subprocess
-
-import click
 import importlib.metadata
+import os
+import subprocess
+from collections import defaultdict
+from pathlib import Path
 from typing import List, Literal
 
+import click
+import loguru
 from loguru import logger
 
 from pbt.config import PBTConfig
 from pbt.diff import RemoteDiff
-from pbt.package import search_packages, topological_sort, update_versions
 from pbt.git import Git
+from pbt.package import search_packages, topological_sort, update_versions
 from pbt.pypi import PyPI
 
 
@@ -106,6 +106,42 @@ def make(
                     verbose=verbose,
                 )
     return
+
+
+@click.command()
+@click.option(
+    "-p",
+    "--package",
+    multiple=True,
+    help="Specify the package that we want to build. If empty, build all packages",
+)
+@click.option("--cwd", default="", help="Override current working directory")
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="increase verbosity",
+)
+def clean(package: List[str], cwd: str = "", verbose: bool = False):
+    """Clean packages' build & lock files"""
+    pbt_cfg = PBTConfig.from_dir(cwd)
+    packages = search_packages(pbt_cfg)
+
+    if len(package) == 0:
+        clean_packages = set(packages.keys())
+    else:
+        clean_packages = set(package)
+
+    if len(clean_packages.difference(packages.keys())) > 0:
+        raise Exception(
+            f"Passing unknown packages: {clean_packages.difference(packages.keys())}. Available options: {list(packages.keys())}"
+        )
+
+    for pkg_name in clean_packages:
+        pkg = packages[pkg_name]
+        if verbose:
+            logger.info("Clean package: {}", pkg.name)
+        pkg.clean(pbt_cfg)
 
 
 @click.command()
@@ -225,6 +261,7 @@ def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
 
 
 cli.add_command(make)
+cli.add_command(clean)
 cli.add_command(publish)
 cli.add_command(update)
 cli.add_command(git)

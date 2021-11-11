@@ -16,7 +16,7 @@ from graphlib import TopologicalSorter
 from loguru import logger
 
 from pbt.config import PBTConfig
-from pbt.diff import diff_db, Diff
+from pbt.diff import diff_db, Diff, remove_diff_db
 from pbt.poetry import Poetry
 from pbt.version import parse_version
 
@@ -40,6 +40,16 @@ class Package:
     inter_dependencies: List["Package"]
     # list of packages that use the current package
     invert_inter_dependencies: List["Package"]
+
+    def clean(self, cfg: PBTConfig):
+        """Clean built & lock files for a fresh install"""
+        for eggdir in glob(str(self.dir / "*.egg-info")):
+            shutil.rmtree(eggdir)
+        if (self.dir / "dist").exists():
+            shutil.rmtree(str(self.dir / "dist"))
+        if (self.dir / "poetry.lock").exists():
+            os.remove(str(self.dir / "poetry.lock"))
+        remove_diff_db(self, cfg)
 
     def build(self, cfg: PBTConfig, verbose: bool = False) -> bool:
         """Build the package if needed"""
@@ -204,7 +214,7 @@ class Package:
                 patterns.append(pattern)
             else:
                 dir_paths.append(pattern)
-        
+
         for depfile in ["pyproject.toml", "requirements.txt"]:
             dir_paths.append(str(self.dir / depfile))
 

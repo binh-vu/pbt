@@ -1,7 +1,8 @@
 import os
+import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Dict
+from typing import TYPE_CHECKING, Dict, List, Optional
 from uuid import uuid4
 
 import orjson
@@ -37,6 +38,12 @@ def diff_db(pkg: "Package", cfg: PBTConfig, new_connection: bool = False) -> roc
                 db_file, rocksdb.Options(create_if_missing=True)
             )
         yield DIFF_DB_CACHE[db_file]
+
+
+def remove_diff_db(pkg: "Package", cfg: PBTConfig):
+    db_file = cfg.cache_dir / f"{pkg.name}.db"
+    if db_file.exists():
+        shutil.rmtree(db_file)
 
 
 @dataclass(eq=True)
