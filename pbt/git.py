@@ -24,6 +24,15 @@ class GitBranch(NamedTuple):
 
     def is_local(self) -> bool:
         return self.local is not None and self.local.find("/") == -1
+    
+    def get_remote(self) -> Optional[str]:
+        if self.local is not None:
+            if self.local.find("/") != -1:
+                return self.local.split("/")[0]
+            if self.remote is None:
+                return None
+        assert self.remote is not None
+        return self.remote.rsplit("/")[1]
 
 
 PathOrStr = Union[str, Path]
@@ -80,6 +89,10 @@ class Git:
         )
 
     @classmethod
+    def does_branch_exist(cls, cwd: PathOrStr, branch: str) -> bool:
+        return subprocess.check_output(["git", "branch", "--list", branch], cwd=cwd).decode().strip() == branch
+
+    @classmethod
     def checkout_branch(cls, cwd: PathOrStr, branch: str, create: bool = False):
         if not create:
             # exist local branch
@@ -111,7 +124,8 @@ class Git:
 
             if x.find(" -> ") != -1:
                 remote, local = x.split(" -> ")
-            elif x.startswith("remotes/"):
+                assert remote.startswith("remotes/") and len(remote.split("/")) == 3, f"Invalid remote: {remote}"
+            elif x.startswith("remotes/") and len(x.split("/")) == 3:
                 remote = x
                 local = None
             else:
@@ -143,21 +157,65 @@ class Git:
         if has_local:
             Git.checkout_branch(cwd, name)
         else:
-            Git.checkout_branch(cwd, name, create=True)
+            # try to identify the remote of this branch in case the branch is not tracked
+            # prefer origin as it is the most common
+            remotes = [r for r in {br.get_remote() for br in brs} if r is not None]
+            if len(remotes) == 0:
+                remote = None
+            elif len(remotes) == 1:
+                remote = remotes[0]
+            elif "origin" in remotes:
+                remote = "origin"
+            else:
+                raise Exception(f"Cannot identify remote for branch {name} as there are multiple remotes: {remotes}")
+
+            if Git.does_branch_exist(cwd, name):
+                # the local branch does exist, so we only need to checkout and pull
+                Git.checkout_branch(cwd, name)
+                Git.pull(cwd, remote=remote)
+            else:
+                Git.checkout_branch(cwd, name, create=True)
 
     @classmethod
     def init(cls, cwd: PathOrStr):
         subprocess.check_output(["git", "init"], cwd=cwd)
 
     @classmethod
-    def pull(cls, cwd: PathOrStr, verbose: bool = False):
+    def pull(cls, cwd: PathOrStr, submodules: bool = False, remote: Optional[str] = None, verbose: bool = False):
         if verbose:
             fn = subprocess.check_call
         else:
             fn = subprocess.check_output
 
-        fn(["git", "pull"], cwd=cwd)
-        fn(["git", "submodule", "update", "--init", "--recursive"], cwd=cwd)
+        try:
+            fn(["git", "pull"], cwd=cwd)
+        except:
+            handle = False
+            
+            # if the the upstream branch does not set, we set it to the current remote
+            try:
+                r = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=cwd)
+            except:
+                branch = Git.get_current_branch(cwd)
+                if remote is None:
+                    # try to identify the remote
+                    remotes = subprocess.check_output(["git", "remote", "-v"], cwd=cwd).decode().strip().split("\n")
+                    if len(remotes) == 1:
+                        remote = remotes[0]
+                    elif "origin" in remotes:
+                        remote = "origin"
+                    else:
+                        raise Exception(f"Can't determine the correct remote for the branch as we have multiple remotes: {remotes}")
+
+                subprocess.check_output(["git", "branch", "--set-upstream-to", f"{remote}/{branch}", branch], cwd=cwd)
+                fn(["git", "pull"], cwd=cwd)
+                handle = True
+            
+            if not handle:
+                raise
+
+        if submodules:
+            fn(["git", "submodule", "update", "--init", "--recursive"], cwd=cwd)
 
     @classmethod
     def commit_all(cls, cwd: PathOrStr, msg: str = "add all files"):

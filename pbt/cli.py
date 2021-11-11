@@ -233,11 +233,13 @@ def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
 
         # checkout the submodule to the correct branch
         for submodule in Git.find_submodules(repo_dir):
+            logger.info("Checkout submodule {}", submodule)
             Git.auto_checkout_branch(submodule)
     elif subcommand == "update":
-        Git.pull(cwd)
+        Git.pull(cwd, submodules=True)
         # checkout the submodule to the correct branch
         for submodule in Git.find_submodules(cwd):
+            logger.info("Checkout submodule {}", submodule)
             Git.auto_checkout_branch(submodule) 
     elif subcommand == "snapshot":
         pbt_cfg = PBTConfig.from_dir(cwd)
