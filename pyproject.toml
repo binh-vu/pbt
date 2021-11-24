@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "polyrepo-bt"
-version = "1.9.3"
+version = "1.9.4"
 description = "A build tool for poetry packages (living in submodules of a Git repo)"
 authors = ["Binh Vu <binh@toan2.com>"]
 license = "MIT"
@@ -16,7 +16,7 @@ python = "^3.8"
 orjson = "^3.6.3"
 toml = "^0.10.2"
 graphlib_backport = {version = "^1.0.0", python = "<3.9"}
-rocksdb = "^0.7.0"
+lbry-rocksdb-optimized = "^0.8.1"
 semver = "^2.13.0"
 pytest-mock = "^3.6.1"
 loguru = "^0.5.3"
