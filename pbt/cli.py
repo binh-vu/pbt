@@ -17,7 +17,7 @@ from pbt.pypi import PyPI
 
 
 @click.group()
-@click.version_option(importlib.metadata.version("polyrepo-bt"))
+# @click.version_option(importlib.metadata.version("pab"))
 def cli():
     pass
 

@@ -46,6 +46,7 @@ class PipFreezePkgInfo:
 
 
 def setup_dir(dir: Directory, cwd: Union[Path, str]):
+    """Create a directory tree with files and folder"""
     cwd = Path(cwd)
     cwd.mkdir(exist_ok=True, parents=True)
     for name, item in dir.items():

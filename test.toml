@@ -24,8 +24,6 @@ loguru = "^0.5.3"
 poetry = "^1.1.8"
 click = "^8.0.3"
 hugedict = ">=1.0.1"
-typing-extensions = "^4.0.0"
-networkx = "^2.6.3"
 
 [tool.poetry.dev-dependencies]
 

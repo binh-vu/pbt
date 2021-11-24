@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from uuid import uuid4
 
 import orjson
-import rocksdb
+from rocksdb import DB, Options, WriteBatch  # type: ignore
 import semver
 from loguru import logger
 
@@ -23,19 +23,19 @@ DIFF_DB_CACHE = {}
 
 
 @contextmanager
-def diff_db(pkg: "Package", cfg: PBTConfig, new_connection: bool = False) -> rocksdb.DB:
+def diff_db(pkg: "Package", cfg: PBTConfig, new_connection: bool = False) -> DB:
     global DIFF_DB_CACHE
     db_file = str(cfg.cache_dir / f"{pkg.name}.db")
     if new_connection:
-        client = rocksdb.DB(db_file, rocksdb.Options(create_if_missing=True))
+        client = DB(db_file, Options(create_if_missing=True))
         try:
             yield client
         finally:
             client.close()
     else:
         if db_file not in DIFF_DB_CACHE:
-            DIFF_DB_CACHE[db_file] = rocksdb.DB(
-                db_file, rocksdb.Options(create_if_missing=True)
+            DIFF_DB_CACHE[db_file] = DB(
+                db_file, Options(create_if_missing=True)
             )
         yield DIFF_DB_CACHE[db_file]
 
@@ -57,7 +57,7 @@ class Diff:
     changed_files_content: Dict[str, Optional[str]]
 
     @staticmethod
-    def from_local(db: rocksdb.DB, pkg: "Package") -> "Diff":
+    def from_local(db: DB, pkg: "Package") -> "Diff":
         """Compute diff of a current package, i.e., which files of a package have been modified"""
         commit_id = Git.get_current_commit(pkg.dir)
 
@@ -77,7 +77,7 @@ class Diff:
             changed_files_content={},
         )
 
-    def is_modified(self, db: rocksdb.DB) -> bool:
+    def is_modified(self, db: DB) -> bool:
         """Check if the package's content has been updated since the last snapshot"""
         prev_commit_id = db.get(b"commit_id")
         if prev_commit_id != self.commit_id.encode():
@@ -103,9 +103,9 @@ class Diff:
             self.changed_files_content[file.fpath] = None
         return False
 
-    def save(self, db: rocksdb.DB):
+    def save(self, db: DB):
         """Snapshot the current changes to the DB so that we can detect changes between commits"""
-        wb = rocksdb.WriteBatch()
+        wb = WriteBatch()
         wb.put(b"commit_id", self.commit_id.encode())
         wb.put(b"changed_files", orjson.dumps([tuple(x) for x in self.changed_files]))
 
@@ -195,7 +195,8 @@ def format_size(n_bytes: int) -> str:
     elif n_bytes >= (1024 ** 2) and n_bytes < (1024 ** 3):
         size = round(n_bytes / (1024 ** 2), 2)
         unit = "MBs"
-    elif n_bytes >= (1024 ** 3):
+    else:
+        assert n_bytes >= (1024 ** 3)
         size = round(n_bytes / (1024 ** 3), 2)
         unit = "GBs"
     return f"{size}{unit}"
