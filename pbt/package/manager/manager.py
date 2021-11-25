@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable, List
-from pbt.package.package import Package
+from typing import Iterable, List, Union
+from pbt.package.package import Package, ThirdPartyPackage
 
 
 class PkgManager(ABC):
@@ -14,8 +14,8 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def iter_package(self, root_dir: Path) -> Iterable[Package]:
-        """Iterate over all packages in the project
+    def glob_query(self, root: Path) -> str:
+        """Return glob query to iterate over all (potential) packages in the project
 
         Args:
             root_dir: The root directory where we start searching
@@ -69,7 +69,9 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def install(self, package: Package, skip_deps: List[str] = None):
+    def install(
+        self, package: Union[Package, ThirdPartyPackage], skip_deps: List[str] = None
+    ):
         """Install the package
 
         Args:

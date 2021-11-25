@@ -16,16 +16,17 @@ class BTPipeline:
         """Discover packages in the project."""
         pkgs = {}
         for manager in self.managers:
-            for pkg in manager.iter_package(self.root):
+            for fpath in manager.glob_query(self.root):
+                pkg = manager.load(Path(fpath).parent)
                 if pkg.name in pkgs:
                     raise RuntimeError(f"Duplicate package {pkg.name}")
                 pkgs[pkg.name] = pkg
         self.graph = PkgGraph.from_pkgs(pkgs)
 
-    def install(self, pkg_name: str):
-        """Install a package."""
+    def force_version_consistency(self):
+        """Update version of packages & third-party packages in the project."""
         pass
 
-    def update(self):
-        """Update packages in the project."""
+    def install(self, pkg_name: str):
+        """Install a package."""
         pass
