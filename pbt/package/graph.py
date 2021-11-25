@@ -1,13 +1,23 @@
 from dataclasses import dataclass
 from itertools import chain
 import networkx as nx
-from typing import Dict, List
+from typing import Dict, Iterable, List, Type, Union
 from __future__ import annotations
-from pbt.package.package import Package, ThirdPartyPackage
+from pbt.package.package import Package, DepConstraints, PackageType
+
+
+@dataclass
+class ThirdPartyPackage:
+    name: str
+    type: PackageType
+    # mapping from source package that use this package to the version the source package depends on
+    invert_dependencies: Dict[str, DepConstraints]
 
 
 class PkgGraph:
-    """Representing the dependencies between packages (including third-party packages) in the project."""
+    """Representing the dependencies between packages (including third-party packages) in the project.
+    The edge between (A, B) represents a dependency relationship that package A uses package B.
+    """
 
     def __init__(self, g: nx.DiGraph = None) -> None:
         self.g = g or nx.DiGraph()
@@ -25,15 +35,24 @@ class PkgGraph:
             g.add_node(pkg.name, pkg=pkg)
 
         for pkg in pkgs.values():
-            for dep, version in chain(
-                pkg.dependencies.items(), pkg.dev_dependencies.items()
-            ):
-                if not g.has_node(dep):
-                    if dep in pkgs:
-                        g.add_node(dep, pkg=pkgs[dep])
+            for deps, is_dev in [
+                (pkg.dependencies, False),
+                (pkg.dev_dependencies, True),
+            ]:
+                deps: Dict[str, DepConstraints]
+                for dep, specs in deps.items():
+                    if not g.has_node(dep):
+                        assert dep not in pkgs
+                        g.add_node(
+                            dep, pkg=ThirdPartyPackage(dep, pkg.type, {pkg.name: specs})
+                        )
                     else:
-                        g.add_node(dep, pkg=ThirdPartyPackage(dep, version["version"]))
-                g.add_edge(dep, pkg.name)
+                        dep_pkg = g.nodes[dep]["pkg"]
+                        if isinstance(dep_pkg, ThirdPartyPackage):
+                            assert dep_pkg.type == pkg.type
+                            dep_pkg.invert_dependencies[pkg.name] = specs
+
+                    g.add_edge(pkg.name, dep, is_dev=is_dev)
 
         try:
             cycles = nx.find_cycle(g, orientation="original")
@@ -43,6 +62,14 @@ class PkgGraph:
 
         return PkgGraph(g)
 
-    def toposort(self) -> List[str]:
-        """Return the list of packages sorted in topological order."""
+    def iter_pkg(self) -> Iterable[Union[ThirdPartyPackage, Package]]:
+        """Iterate over all packages in the graph."""
+        return (self.g.nodes[pkg]["pkg"] for pkg in self.g.nodes)
+
+    def toposort_deps(self, pkg: Package) -> List[Union[ThirdPartyPackage, Package]]:
+        """Return the list of packages that is dependency of the input package sorted in topological order.
+
+        Args:
+            pkg: The package to get the dependencies of.
+        """
         return []

@@ -29,7 +29,9 @@ def exec(
     if handler is None:
         handler = lambda x: None
 
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(cwd))
+    p = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(cwd)
+    )
     output = []
 
     while True:
@@ -46,3 +48,17 @@ def exec(
         raise subprocess.CalledProcessError(returncode, cmd, "".join(output))
 
     return output
+
+
+def cache_func():
+    d = {}
+
+    def wrapper(func):
+        def fn(*args):
+            if args not in d:
+                d[args] = func(*args)
+            return d[args]
+
+        return fn
+
+    return wrapper

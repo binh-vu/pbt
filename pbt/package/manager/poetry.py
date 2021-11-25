@@ -1,14 +1,14 @@
 import glob
+from operator import attrgetter
 import os
 from contextlib import contextmanager
-from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable, List, Literal, cast
+from typing import Any, Dict, Iterable, List, Literal, Union, cast
 
 from loguru import logger
-from pbt.misc import exec
+from pbt.misc import cache_func, exec
 from pbt.package.manager.manager import PkgManager
-from pbt.package.package import Package, PackageType
+from pbt.package.package import DepConstraint, DepConstraints, Package, PackageType
 from tomlkit.api import document, dumps, inline_table, key, loads, nl, table
 from tomlkit.items import Key, KeyType
 
@@ -59,22 +59,19 @@ class Poetry(PkgManager):
                 version = project_cfg["tool"]["poetry"]["version"]
 
                 dependencies = {}
-                for k, v in project_cfg["tool"]["poetry"]["dependencies"].items():
-                    if isinstance(v, str):
-                        dependencies[k] = {"version": v}
-                    else:
-                        assert isinstance(v, dict)
-                        assert "version" in v
-                        dependencies[k] = v
-
                 dev_dependencies = {}
-                for k, v in project_cfg["tool"]["poetry"]["dev-dependencies"].items():
-                    if isinstance(v, str):
-                        dev_dependencies[k] = {"version": v}
-                    else:
-                        assert isinstance(v, dict)
-                        assert "version" in v
-                        dev_dependencies[k] = v
+
+                for deps, cfg_key in [
+                    (dependencies, "dependencies"),
+                    (dev_dependencies, "dev-dependencies"),
+                ]:
+                    for k, vs in project_cfg["tool"]["poetry"][cfg_key].items():
+                        if not isinstance(vs, list):
+                            vs = [vs]
+                        deps[k] = sorted(
+                            (self.parse_dep_spec(v) for v in vs),
+                            key=attrgetter("constraint"),
+                        )
 
                 # see https://python-poetry.org/docs/pyproject/#include-and-exclude
                 # and https://python-poetry.org/docs/pyproject/#packages
@@ -114,14 +111,17 @@ class Poetry(PkgManager):
                 doc.add(Key("tool.poetry", t=KeyType.Bare), tbl)
 
                 tbl = table()
-                for dep, info in pkg.dependencies.items():
-                    if len(info) > 1:
-                        x = inline_table()
-                        for k, v in info.items():
-                            x[k] = v
-                        tbl.add(dep, x)
-                    else:
-                        tbl.add(dep, info["version"])
+                for dep, specs in pkg.dependencies.items():
+                    items = []
+                    for spec in specs:
+                        if spec.origin_spec is None:
+                            item = spec.version_spec
+                        else:
+                            item = inline_table()
+                            item[cast(str, spec.version_spec_field)] = spec.version_spec
+                            for k, v in spec.origin_spec.items():
+                                item[k] = v
+                    tbl.add(dep, items)
                 doc.add(nl())
                 doc.add(Key("tool.poetry.dependencies", t=KeyType.Bare), tbl)
 
@@ -150,25 +150,32 @@ class Poetry(PkgManager):
                 (pkg.dependencies, "dependencies"),
                 (pkg.dev_dependencies, "dev-dependencies"),
             ]:
-                for dep, version in dependencies.items():
+                dependencies: Dict[str, DepConstraints]
+                for dep, specs in dependencies.items():
                     is_dep_modified = False
                     if dep not in doc["tool"]["poetry"][corr_key]:
                         is_dep_modified = True
                     else:
-                        other_ver = doc["tool"]["poetry"][corr_key][dep]
-                        if isinstance(other_ver, str):
-                            other_ver = {"version": other_ver}
-                        if other_ver != version:
+                        other_vers = doc["tool"]["poetry"][corr_key][dep]
+                        if not isinstance(other_vers, list):
+                            other_vers = [other_vers]
+                        other_specs = [self.parse_dep_spec(v) for v in other_vers]
+                        if specs != other_specs:
                             is_dep_modified = True
 
                     if is_dep_modified:
-                        if len(version) > 1:
-                            x = inline_table()
-                            for k, v in version.items():
-                                x[k] = v
-                            doc["tool"]["poetry"][corr_key][dep] = x
-                        else:
-                            doc["tool"]["poetry"][corr_key][dep] = version["version"]
+                        items = []
+                        for spec in specs:
+                            if spec.origin_spec is None:
+                                item = spec.version_spec
+                            else:
+                                item = inline_table()
+                                item[
+                                    cast(str, spec.version_spec_field)
+                                ] = spec.version_spec
+                                for k, v in spec.origin_spec.items():
+                                    item[k] = v
+                        doc["tool"]["poetry"][corr_key][dep] = items
                         is_modified = True
 
         if is_modified:
@@ -206,7 +213,7 @@ class Poetry(PkgManager):
         else:
             exec("poetry install", cwd=pkg.location, **self.exec_options("install"))
 
-    @lru_cache(maxsize=None)
+    @cache_func()
     def env_path(self, name: str, dir: Path) -> Path:
         """Get environment path of the package, create it if doesn't exist"""
         output = exec(
@@ -218,7 +225,7 @@ class Poetry(PkgManager):
             exec(
                 "poetry run python -m __hello__",
                 cwd=dir,
-                **self.exec_options("env.create")
+                **self.exec_options("env.create"),
             )
             output = exec(
                 "poetry env list --full-path", cwd=dir, **self.exec_options("env.fetch")
@@ -249,3 +256,25 @@ class Poetry(PkgManager):
         if cmd in {"publish", "install"}:
             return {}
         return {}
+
+    def parse_dep_spec(self, spec: Union[str, dict]) -> DepConstraint:
+        if isinstance(spec, str):
+            return DepConstraint(version_spec=spec)
+        elif isinstance(spec, dict):
+            if "version" not in spec:
+                raise NotImplementedError(
+                    f"Not support specify dependency outside of Pypi yet. But found spec {spec}"
+                )
+
+            constraint = (
+                f"python={spec.get('python', '*')} markers={spec.get('markers', '')}"
+            )
+            origin_spec = spec.copy()
+            origin_spec.pop("version")
+
+            return DepConstraint(
+                version_spec=spec["version"],
+                constraint=constraint,
+                version_spec_field="version",
+                origin_spec=origin_spec,
+            )
