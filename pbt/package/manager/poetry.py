@@ -20,11 +20,8 @@ class Poetry(PkgManager):
     def is_package_directory(self, dir: Path) -> bool:
         return (dir / "pyproject.toml").exists()
 
-    def iter_package(self, root: Path) -> Iterable[Package]:
-        return [
-            self.load(os.path.dirname(fpath))
-            for fpath in glob(root.absolute() / "**/pyproject.toml")
-        ]
+    def glob_query(self, root: Path) -> str:
+        return glob(root.absolute() / "**/pyproject.toml")
 
     @contextmanager  # type: ignore
     def mask(self, pkg: Package, deps: List[str]):
