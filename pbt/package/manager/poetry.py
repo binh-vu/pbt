@@ -4,6 +4,7 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Union, cast
+from xml.etree.ElementInclude import include
 
 from loguru import logger
 from pbt.misc import cache_func, exec
@@ -24,15 +25,26 @@ class Poetry(PkgManager):
         return glob(root.absolute() / "**/pyproject.toml")
 
     @contextmanager  # type: ignore
-    def mask(self, pkg: Package, deps: List[str]):
+    def mask(
+        self,
+        pkg: Package,
+        skip_deps: List[str],
+        additional_deps: Dict[str, DepConstraints],
+    ):
         with open(pkg.location / "pyproject.toml", "r") as f:
             doc = cast(dict, loads(f.read()))
 
-        for dep in deps:
+        for dep in skip_deps:
             if dep in doc["tool"]["poetry"]["dependencies"]:
                 doc["tool"]["poetry"]["dependencies"].pop(dep)
             elif dep in doc["tool"]["poetry"]["dev-dependencies"]:
                 doc["tool"]["poetry"]["dev-dependencies"].pop(dep)
+
+        for dep, specs in additional_deps.items():
+            if dep not in doc["tool"]["poetry"]["dependencies"]:
+                doc["tool"]["poetry"]["dependencies"][dep] = self.serialize_dep_specs(
+                    specs
+                )
 
         try:
             os.rename(
@@ -112,16 +124,7 @@ class Poetry(PkgManager):
 
                 tbl = table()
                 for dep, specs in pkg.dependencies.items():
-                    items = []
-                    for spec in specs:
-                        if spec.origin_spec is None:
-                            item = spec.version_spec
-                        else:
-                            item = inline_table()
-                            item[cast(str, spec.version_spec_field)] = spec.version_spec
-                            for k, v in spec.origin_spec.items():
-                                item[k] = v
-                    tbl.add(dep, items)
+                    tbl.add(dep, self.serialize_dep_specs(specs))
                 doc.add(nl())
                 doc.add(Key("tool.poetry.dependencies", t=KeyType.Bare), tbl)
 
@@ -164,18 +167,9 @@ class Poetry(PkgManager):
                             is_dep_modified = True
 
                     if is_dep_modified:
-                        items = []
-                        for spec in specs:
-                            if spec.origin_spec is None:
-                                item = spec.version_spec
-                            else:
-                                item = inline_table()
-                                item[
-                                    cast(str, spec.version_spec_field)
-                                ] = spec.version_spec
-                                for k, v in spec.origin_spec.items():
-                                    item[k] = v
-                        doc["tool"]["poetry"][corr_key][dep] = items
+                        doc["tool"]["poetry"][corr_key][dep] = self.serialize_dep_specs(
+                            specs
+                        )
                         is_modified = True
 
         if is_modified:
@@ -203,15 +197,33 @@ class Poetry(PkgManager):
     def publish(self, pkg: Package):
         exec("poetry publish --build", cwd=pkg.location, **self.exec_options("publish"))
 
-    def install(self, pkg: Package, skip_deps: List[str] = None):
+    def install(
+        self,
+        pkg: Package,
+        include_dev: bool = False,
+        skip_deps: List[str] = None,
+        additional_deps: Dict[str, DepConstraints] = None,
+    ):
         if skip_deps is None:
             skip_deps = []
+        if additional_deps is None:
+            additional_deps = {}
 
-        if len(skip_deps) > 0:
-            with self.mask(pkg, skip_deps):
-                exec("poetry install", cwd=pkg.location, **self.exec_options("install"))
+        options = "--no-dev" if not include_dev else ""
+
+        if len(skip_deps) + len(additional_deps) > 0:
+            with self.mask(pkg, skip_deps, additional_deps):
+                exec(
+                    f"poetry install {options}",
+                    cwd=pkg.location,
+                    **self.exec_options("install"),
+                )
         else:
-            exec("poetry install", cwd=pkg.location, **self.exec_options("install"))
+            exec(
+                f"poetry install {options}",
+                cwd=pkg.location,
+                **self.exec_options("install"),
+            )
 
     @cache_func()
     def env_path(self, name: str, dir: Path) -> Path:
@@ -278,3 +290,15 @@ class Poetry(PkgManager):
                 version_spec_field="version",
                 origin_spec=origin_spec,
             )
+
+    def serialize_dep_specs(self, specs: DepConstraints) -> List[str]:
+        items = []
+        for spec in specs:
+            if spec.origin_spec is None:
+                item = spec.version_spec
+            else:
+                item = inline_table()
+                item[cast(str, spec.version_spec_field)] = spec.version_spec
+                for k, v in spec.origin_spec.items():
+                    item[k] = v
+        return items

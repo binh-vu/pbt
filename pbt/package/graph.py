@@ -44,14 +44,14 @@ class PkgGraph:
                     if not g.has_node(dep):
                         assert dep not in pkgs
                         g.add_node(
-                            dep, pkg=ThirdPartyPackage(dep, pkg.type, {pkg.name: specs})
+                            dep,
+                            pkg=ThirdPartyPackage(dep, pkg.type, {pkg.name: specs}),
                         )
                     else:
                         dep_pkg = g.nodes[dep]["pkg"]
                         if isinstance(dep_pkg, ThirdPartyPackage):
                             assert dep_pkg.type == pkg.type
                             dep_pkg.invert_dependencies[pkg.name] = specs
-
                     g.add_edge(pkg.name, dep, is_dev=is_dev)
 
         try:
@@ -66,10 +66,22 @@ class PkgGraph:
         """Iterate over all packages in the graph."""
         return (self.g.nodes[pkg]["pkg"] for pkg in self.g.nodes)
 
-    def toposort_deps(self, pkg: Package) -> List[Union[ThirdPartyPackage, Package]]:
-        """Return the list of packages that is dependency of the input package sorted in topological order.
+    def dependencies(
+        self, pkg_name: str, include_dev: bool = False
+    ) -> List[Union[ThirdPartyPackage, Package]]:
+        """Return the list of packages that are dependency of the input package.
 
         Args:
-            pkg: The package to get the dependencies of.
+            pkg_name: The package to get the dependencies of.
+            include_dev: Whether to include dev dependencies.
         """
-        return []
+        successors = nx.dfs_successors(self.g, pkg_name)
+        if include_dev:
+            return [self.g[uid]["pkg"] for uid in successors.keys()]
+
+        lst = []
+        for vid, parents in successors.items():
+            if all(self.g[uid][vid]["is_dev"] for uid in parents):
+                continue
+            lst.append(self.g[vid]["pkg"])
+        return lst

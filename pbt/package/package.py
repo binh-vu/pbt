@@ -68,7 +68,6 @@ class Package:
     # so that you should never use them to override previous package definition
     type: PackageType
     location: Path
-
     # list of glob patterns to be included in the final package
     include: List[str]
     # a list of glob patterns to be excluded in the final package
