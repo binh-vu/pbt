@@ -5,8 +5,8 @@ import semver, re
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
-from pbt.package.package import DepConstraints, Package
+from typing import Dict, List, Optional, Tuple, Union
+from pbt.package.package import DepConstraint, DepConstraints, Package
 from pbt.misc import cache_func
 
 
@@ -74,12 +74,20 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def install(self, package: Package, skip_deps: List[str] = None):
-        """Install the package
+    def install(
+        self,
+        package: Package,
+        include_dev: bool = False,
+        skip_deps: List[str] = None,
+        additional_deps: Dict[str, DepConstraints] = None,
+    ):
+        """Install the package, assuming the the specification is updated.
 
         Args:
             package: The package to install
+            include_dev: Whether to install dev dependencies
             skip_deps: The dependencies to skip (usually the ones we want to install in linked mode).
+            additional_deps: The additional dependencies to install
         """
         raise NotImplementedError()
 

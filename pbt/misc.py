@@ -24,7 +24,7 @@ def exec(
         cwd: working directory.
     """
     if isinstance(cmd, str):
-        cmd = cmd.split(" ")
+        cmd = [x for x in cmd.split(" ") if x != ""]
 
     if handler is None:
         handler = lambda x: None

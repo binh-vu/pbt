@@ -43,18 +43,19 @@ class BTPipeline:
         Args:
             mode: how to enforce version consistency for your OWN packages in the project.
         """
-        # resolve the latest version of (third-party) packages
-        pkg2version = {}
+        # resolve the latest version specs of (third-party) packages
+        thirdparty_pkgs = {}
 
         for pkg in self.graph.iter_pkg():
             if isinstance(pkg, ThirdPartyPackage):
                 manager = self.managers[pkg.type]
                 versions = list(pkg.invert_dependencies.values())
                 latest_version = manager.find_latest_specs(versions)
-                pkg2version[pkg.name] = latest_version
+                thirdparty_pkgs[pkg.name] = latest_version
 
         # iterate over packages and update their dependencies.
-        # however, for your own packages, always use the latest version
+        # however, for your own packages, always use the latest version or make sure it
+        # is compatible according to the mode
         for pkg in self.pkgs.values():
             manager = self.managers[pkg.type]
             is_modified = False
@@ -83,14 +84,21 @@ class BTPipeline:
                                     spec.version_spec = manager.update_version_spec(
                                         spec.version_spec, dep_version
                                     )
-                    elif specs != pkg2version[dep]:
-                        deps[dep] = pkg2version[dep]
+                    elif specs != thirdparty_pkgs[dep]:
+                        deps[dep] = thirdparty_pkgs[dep]
                         is_modified = True
 
             if is_modified:
                 manager.save(pkg)
 
-    def install(self, pkg_names: List[str] = None, editable: bool = False):
+        # TODO: update the graph with new version
+
+    def install(
+        self,
+        pkg_names: List[str] = None,
+        include_dev: bool = False,
+        editable: bool = False,
+    ):
         """Install packages
 
         Args:
@@ -105,6 +113,36 @@ class BTPipeline:
         for pkg in pkgs:
             manager = self.managers[pkg.type]
             # gather all dependencies in one file and install it.
+            deps = self.graph.dependencies(pkg.name, include_dev=include_dev)
+
+            skip_deps = [
+                dep.name
+                for dep in deps
+                if isinstance(dep, Package)
+                and (dep.name in pkg.dependencies or dep.name in pkg.dev_dependencies)
+            ]
+            additional_deps = [
+                dep
+                for dep in deps
+                if isinstance(dep, ThirdPartyPackage)
+                and dep.name not in pkg.dependencies
+                and dep.name not in pkg.dev_dependencies
+            ]
+
+            manager.install(
+                pkg,
+                include_dev=include_dev,
+                skip_deps=skip_deps,
+                additional_deps=additional_deps,
+            )
+            # tmp_pkg = Package(
+            #     name=pkg.name,
+            #     version=pkg.version,
+            #     dependencies=
+            # )
+
+            # pkd =
+
             manager.install(pkg)
 
     def publish(self, pkg_names: List[str] = None):
