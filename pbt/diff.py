@@ -13,8 +13,8 @@ from loguru import logger
 from pbt.config import PBTConfig
 from pbt.git import Git, GitFileStatus
 
-if TYPE_CHECKING:
-    from pbt.package import Package
+from pbt.package.package import Package
+from pbt.package.manager import PkgManager
 
 # file size limit
 SOFT_SIZE_LIMIT = (1024 ** 2) * 1  # 1MB
@@ -34,9 +34,7 @@ def diff_db(pkg: "Package", cfg: PBTConfig, new_connection: bool = False) -> DB:
             client.close()
     else:
         if db_file not in DIFF_DB_CACHE:
-            DIFF_DB_CACHE[db_file] = DB(
-                db_file, Options(create_if_missing=True)
-            )
+            DIFF_DB_CACHE[db_file] = DB(db_file, Options(create_if_missing=True))
         yield DIFF_DB_CACHE[db_file]
 
 
@@ -59,10 +57,10 @@ class Diff:
     @staticmethod
     def from_local(db: DB, pkg: "Package") -> "Diff":
         """Compute diff of a current package, i.e., which files of a package have been modified"""
-        commit_id = Git.get_current_commit(pkg.dir)
+        commit_id = Git.get_current_commit(pkg.location)
 
         # TODO: make this code to get changed files more efficient
-        changed_files = Git.get_new_modified_deleted_files(pkg.dir)
+        changed_files = Git.get_new_modified_deleted_files(pkg.location)
         include_files = set(
             pkg.filter_included_files([file.fpath for file in changed_files])
         )
@@ -142,6 +140,7 @@ class RemoteDiff:
 
     @staticmethod
     def from_pkg(
+        manager: PkgManager,
         pkg: "Package",
         cfg: PBTConfig,
         remote_version: Optional[str] = None,
@@ -159,8 +158,8 @@ class RemoteDiff:
             return RemoteDiff(is_version_diff=True, is_content_changed=True)
 
         # TODO: replace the approximation algorithm (checking hash) with exact algorithm
-        #  that determine if the content is the same
-        pkg_hash = pkg.compute_pip_hash(cfg)
+        # that determine if the content is the same
+        pkg_hash = manager.compute_pkg_hash(pkg, cfg)
         return RemoteDiff(
             is_version_diff=False, is_content_changed=pkg_hash != remote_version_hash
         )

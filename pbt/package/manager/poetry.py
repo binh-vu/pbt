@@ -3,10 +3,13 @@ from operator import attrgetter
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Literal, Union, cast
+import shutil
+from typing import Any, Dict, Iterable, List, Literal, Optional, Union, cast
 from xml.etree.ElementInclude import include
 
 from loguru import logger
+from pbt.config import PBTConfig
+from pbt.diff import Diff, diff_db
 from pbt.misc import cache_func, exec
 from pbt.package.manager.manager import PkgManager
 from pbt.package.package import DepConstraint, DepConstraints, Package, PackageType
@@ -225,6 +228,38 @@ class Poetry(PkgManager):
                 **self.exec_options("install"),
             )
 
+    def build(self, pkg: Package, cfg: PBTConfig):
+        whl_file = self.wheel_path(pkg)
+        with diff_db(pkg, cfg) as db:
+            diff = Diff.from_local(db, pkg)
+            if whl_file is not None:
+                if not diff.is_modified(db):
+                    logger.debug(
+                        "Skip package {} as the content does not change", pkg.name
+                    )
+                    return False
+
+            try:
+                if (pkg.location / "dist").exists():
+                    shutil.rmtree(str(pkg.location / "dist"))
+                exec("poetry build", cwd=pkg.location)
+            finally:
+                diff.save(db)
+            return True
+
+    def compute_pkg_hash(
+        self, pkg: Package, cfg: PBTConfig, no_build: bool = False
+    ) -> str:
+        """Compute hash of the content of the package"""
+        if not no_build:
+            self.build(pkg, cfg)
+        whl_path = self.wheel_path(pkg)
+        assert whl_path is not None
+        output = "".join(exec(["pip", "hash", whl_path]))
+        output = output[output.find("--hash=") + len("--hash=") :]
+        assert output.startswith("sha256:")
+        return output[len("sha256:") :]
+
     @cache_func()
     def env_path(self, name: str, dir: Path) -> Path:
         """Get environment path of the package, create it if doesn't exist"""
@@ -255,6 +290,18 @@ class Poetry(PkgManager):
             path = output[0]
 
         return Path(path)
+
+    def tar_path(self, pkg: Package) -> Optional[Path]:
+        tar_file = pkg.location / "dist" / f"{pkg.name}-{pkg.version}.tar.gz"
+        if tar_file.exists():
+            return tar_file
+        return None
+
+    def wheel_path(self, pkg: Package) -> Optional[Path]:
+        whl_files = glob(str(pkg.location / f"dist/{pkg.name.replace('-', '_')}*.whl"))
+        if len(whl_files) == 0:
+            return None
+        return Path(whl_files[0])
 
     def pip_path(self, pkg: Package) -> Path:
         return self.env_path(pkg.name, pkg.location) / "bin/pip"  # type: ignore

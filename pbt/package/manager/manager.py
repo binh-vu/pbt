@@ -74,6 +74,25 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def build(self, package: Package):
+        """Build the package
+
+        Args:
+            package: The package to build
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def install_dependency(self, package: Package, dependency: Package):
+        """Install the given dependency for the given package
+
+        Args:
+            package: The package to install the dependency for
+            dependency: The dependency to install
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
     def install(
         self,
         package: Package,
@@ -90,6 +109,9 @@ class PkgManager(ABC):
             additional_deps: The additional dependencies to install
         """
         raise NotImplementedError()
+
+    def compute_pkg_hash(self, pkg: Package) -> str:
+        pass
 
     def find_latest_specs(self, lst_specs: List[DepConstraints]) -> DepConstraints:
         """Given a set of specs, some of them may be the same, some of them are older.
