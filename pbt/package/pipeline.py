@@ -49,9 +49,13 @@ class BTPipeline:
         for pkg in self.graph.iter_pkg():
             if isinstance(pkg, ThirdPartyPackage):
                 manager = self.managers[pkg.type]
-                versions = list(pkg.invert_dependencies.values())
-                latest_version = manager.find_latest_specs(versions)
-                thirdparty_pkgs[pkg.name] = latest_version
+                latest_specs = manager.find_latest_specs(
+                    list(pkg.invert_dependencies.values())
+                )
+                thirdparty_pkgs[pkg.name] = latest_specs
+                # update graph
+                for key in pkg.invert_dependencies:
+                    pkg.invert_dependencies[key] = latest_specs
 
         # iterate over packages and update their dependencies.
         # however, for your own packages, always use the latest version or make sure it
@@ -91,8 +95,6 @@ class BTPipeline:
             if is_modified:
                 manager.save(pkg)
 
-        # TODO: update the graph with new version
-
     def install(
         self,
         pkg_names: List[str] = None,
@@ -121,13 +123,13 @@ class BTPipeline:
                 if isinstance(dep, Package)
                 and (dep.name in pkg.dependencies or dep.name in pkg.dev_dependencies)
             ]
-            additional_deps = [
-                dep
+            additional_deps = {
+                dep.name: next(iter(dep.invert_dependencies.values()))
                 for dep in deps
                 if isinstance(dep, ThirdPartyPackage)
                 and dep.name not in pkg.dependencies
                 and dep.name not in pkg.dev_dependencies
-            ]
+            }
 
             manager.install(
                 pkg,
@@ -135,15 +137,10 @@ class BTPipeline:
                 skip_deps=skip_deps,
                 additional_deps=additional_deps,
             )
-            # tmp_pkg = Package(
-            #     name=pkg.name,
-            #     version=pkg.version,
-            #     dependencies=
-            # )
 
-            # pkd =
-
-            manager.install(pkg)
+            for dep in deps:
+                if isinstance(dep, Package):
+                    manager.install(dep)
 
     def publish(self, pkg_names: List[str] = None):
         """Publish a package.

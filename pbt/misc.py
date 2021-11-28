@@ -9,7 +9,7 @@ def stdout(line):
 
 
 def exec(
-    cmd: Union[str, List[str]],
+    cmd: Union[str, List[Union[str, Path]]],
     handler: Callable[[str], None] = None,
     check_returncode: bool = True,
     cwd: Union[Path, str] = "./",
@@ -25,6 +25,8 @@ def exec(
     """
     if isinstance(cmd, str):
         cmd = [x for x in cmd.split(" ") if x != ""]
+    else:
+        cmd = [str(x) for x in cmd]
 
     if handler is None:
         handler = lambda x: None
