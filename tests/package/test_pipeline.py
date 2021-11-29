@@ -92,13 +92,6 @@ def test_enforce_version_consistency(repo1: Repo):
 
     # bump major of lib0 should update lib1 and lib3
     repo1.poetry.next_version(lib0, "major")
-    repo1.reload_pkgs()
-    assert [
-        lib0.version,
-        lib1.dependencies[lib0.name][0].version_spec,
-        lib2.dependencies[lib1.name][0].version_spec,
-        lib3.dependencies[lib0.name][0].version_spec,
-    ] == ["1.0.0", "^0.5.1", "~0.2.1", "~0.5.1"]
     pl.discover()
     pl.enforce_version_consistency()
     repo1.reload_pkgs()
@@ -111,13 +104,6 @@ def test_enforce_version_consistency(repo1: Repo):
 
     # patch of lib0 should not effect the project
     repo1.poetry.next_version(lib0, "patch")
-    repo1.reload_pkgs()
-    assert [
-        lib0.version,
-        lib1.dependencies[lib0.name][0].version_spec,
-        lib2.dependencies[lib1.name][0].version_spec,
-        lib3.dependencies[lib0.name][0].version_spec,
-    ] == ["1.0.1", "^1.0.0", "~0.2.1", "~1.0.0"]
     pl.discover()
     pl.enforce_version_consistency()
     repo1.reload_pkgs()
@@ -130,13 +116,6 @@ def test_enforce_version_consistency(repo1: Repo):
 
     # bump minor of lib0 should update lib3 after rebuilt
     repo1.poetry.next_version(lib0, "minor")
-    repo1.reload_pkgs()
-    assert [
-        lib0.version,
-        lib1.dependencies[lib0.name][0].version_spec,
-        lib2.dependencies[lib1.name][0].version_spec,
-        lib3.dependencies[lib0.name][0].version_spec,
-    ] == ["1.1.0", "^1.0.0", "~0.2.1", "~1.0.0"]
     pl.discover()
     pl.enforce_version_consistency()
     repo1.reload_pkgs()
@@ -146,3 +125,15 @@ def test_enforce_version_consistency(repo1: Repo):
         lib2.dependencies[lib1.name][0].version_spec,
         lib3.dependencies[lib0.name][0].version_spec,
     ] == ["1.1.0", "^1.0.0", "~0.2.1", "~1.1.0"]
+
+    # strict mode will force updating lib0 even when it's only patched
+    repo1.poetry.next_version(lib0, "patch")
+    pl.discover()
+    pl.enforce_version_consistency()
+    repo1.reload_pkgs()
+    assert [
+        lib0.version,
+        lib1.dependencies[lib0.name][0].version_spec,
+        lib2.dependencies[lib1.name][0].version_spec,
+        lib3.dependencies[lib0.name][0].version_spec,
+    ] == ["1.1.1", "^1.1.1", "~0.2.1", "~1.1.1"]
