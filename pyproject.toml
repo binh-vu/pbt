@@ -16,18 +16,18 @@ pbt = 'pbt.cli:cli'
 python = "^3.7"
 orjson = "^3.6.3"
 toml = "^0.10.2"
-graphlib_backport = {version = "^1.0.0", python = "<3.9"}
-lbry-rocksdb-optimized = "^0.8.1"
 semver = "^2.13.0"
 pytest-mock = "^3.6.1"
 loguru = "^0.5.3"
 poetry = "^1.1.8"
 click = "^8.0.3"
-hugedict = ">=1.0.1"
 typing-extensions = "^4.0.0"
 networkx = "^2.6.3"
+lbry-rocksdb-optimized = "^0.8.1"
+hugedict = ">=1.0.1"
 
 [tool.poetry.dev-dependencies]
+black = {version = "^21.11b1", allow-prereleases = true}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
