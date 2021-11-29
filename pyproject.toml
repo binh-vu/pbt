@@ -1,8 +1,10 @@
 [tool.poetry]
 name = "pab"
-version = "1.9.4"
-description = "A build tool for poetry packages (living in submodules of a Git repo)"
+version = "2.0.1"
+description = "A build tool for multi-projects that leverages package registries (pypi, npmjs, etc.)"
 authors = ["Binh Vu <binh@toan2.com>"]
+homepage = "https://github.com/binh-vu/pbt"
+repository = "https://github.com/binh-vu/pbt"
 license = "MIT"
 packages = [
     { include = "pbt" }

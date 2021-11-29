@@ -5,7 +5,7 @@ from pbt.package.manager.poetry import Poetry
 from tests.conftest import Repo, setup_dir
 
 from pbt.diff import diff_db, Diff, RemoteDiff
-from pbt.pypi import PyPI
+from pbt.package.registry.pypi import PyPI
 
 
 def test_local_diff(repo1: Repo):

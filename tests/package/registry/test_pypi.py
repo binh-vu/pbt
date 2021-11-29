@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from pbt.pypi import PyPI
+from pbt.package.registry.pypi import PyPI
 
 
 def test_does_package_exist():
