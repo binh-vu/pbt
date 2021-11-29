@@ -3,11 +3,12 @@ import requests
 import semver
 
 from pbt.version import parse_version
+from pbt.package.registry.registry import PkgRegistry
 
 PYPI_INDEX = "https://pypi.org"
 
 
-class PyPI:
+class PyPI(PkgRegistry):
     instances: Dict[str, "PyPI"] = {}
 
     def __init__(self, index: str):

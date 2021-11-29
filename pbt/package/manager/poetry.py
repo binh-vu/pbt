@@ -227,7 +227,9 @@ class Poetry(PkgManager):
         shutil.rmtree(pkg.location / "dist", ignore_errors=True)
 
     def publish(self, pkg: Package):
-        exec("poetry publish --build", cwd=pkg.location, **self.exec_options("publish"))
+        raise NotImplementedError()
+
+    #     exec("poetry publish --build", cwd=pkg.location, **self.exec_options("publish"))
 
     def install(
         self,

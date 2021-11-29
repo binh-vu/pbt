@@ -1,25 +1,17 @@
-import importlib.metadata
-import os
-import subprocess
-from collections import defaultdict
-from pathlib import Path
-from typing import List, Literal, Tuple
+from typing import List, Tuple
 
 import click
 from loguru import logger
 
 from pbt.config import PBTConfig
-from pbt.diff import RemoteDiff
-from pbt.git import Git
 from pbt.package.manager.poetry import Poetry
 from pbt.package.package import PackageType
 from pbt.package.pipeline import BTPipeline, VersionConsistent
-
-from pbt.pypi import PyPI
+from pbt.package.registry.pypi import PyPI
 
 
 def preprocessing(
-    cwd: str, packages: List[str]
+    cwd: str, packages: List[str], verbose: bool
 ) -> Tuple[BTPipeline, PBTConfig, List[str]]:
     cfg = PBTConfig.from_dir(cwd)
     pl = BTPipeline(
@@ -77,7 +69,7 @@ def install(
     verbose: bool = False,
 ):
     """Make package"""
-    pl, cfg, pkgs = preprocessing(cwd, package)
+    pl, cfg, pkgs = preprocessing(cwd, package, verbose)
 
     pl.enforce_version_consistency()
     pl.install(sorted(pkgs), include_dev=dev, editable=editable)
@@ -99,7 +91,7 @@ def install(
 )
 def clean(package: List[str], cwd: str = "", verbose: bool = False):
     """Clean packages' build & lock files"""
-    pl, cfg, pkgs = preprocessing(cwd, package)
+    pl, cfg, pkgs = preprocessing(cwd, package, verbose)
 
     pl.enforce_version_consistency()
     for pkg_name in pkgs:
@@ -109,8 +101,14 @@ def clean(package: List[str], cwd: str = "", verbose: bool = False):
 
 @click.command()
 @click.option("--cwd", default="", help="Override current working directory")
-def update(cwd: str = ""):
-    pl, cfg, pkgs = preprocessing(cwd, [])
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="increase verbosity",
+)
+def update(cwd: str = "", verbose: bool = False):
+    pl, cfg, pkgs = preprocessing(cwd, [], verbose)
     pl.enforce_version_consistency(VersionConsistent.STRICT)
 
 
@@ -122,56 +120,18 @@ def update(cwd: str = ""):
     help="Specify the package that we want to build. If empty, build all packages",
 )
 @click.option("--cwd", default="", help="Override current working directory")
-def publish(package: str, cwd: str = ""):
-    pbt_cfg = PBTConfig.from_dir(cwd)
-    packages = search_packages(pbt_cfg)
-
-    if len(package) == 0:
-        publish_packages = set(packages.keys())
-    else:
-        publish_packages = set(package)
-
-    if len(publish_packages.difference(packages.keys())) > 0:
-        raise Exception(
-            f"Passing unknown packages: {publish_packages.difference(packages.keys())}. Available options: {list(packages.keys())}"
-        )
-
-    all_pub_pkgs = {}
-    for pkg_name in publish_packages:
-        pkg = packages[pkg_name]
-        dep_pkgs = pkg.all_inter_dependencies()
-
-        all_pub_pkgs[pkg.name] = pkg
-        all_pub_pkgs.update(dep_pkgs)
-
-    update_versions(all_pub_pkgs.keys(), packages)
-    pypi = PyPI.get_instance()
-    has_error = False
-
-    all_pub_pkgs = [
-        all_pub_pkgs[pkg_name] for pkg_name in topological_sort(all_pub_pkgs)
-    ]
-    pkg2diff = {}
-
-    for pkg in all_pub_pkgs:
-        remote_pkg_version, remote_pkg_hash = pypi.get_latest_version_and_hash(
-            pkg.name
-        ) or (None, None)
-        diff = RemoteDiff.from_pkg(pkg, pbt_cfg, remote_pkg_version, remote_pkg_hash)
-        if not diff.is_version_diff and diff.is_content_changed:
-            logger.error(
-                "Package {} has been modified, but its version hasn't been updated",
-                pkg.name,
-            )
-            has_error = True
-        pkg2diff[pkg.name] = diff
-
-    if has_error:
-        raise Exception(
-            "Stop publishing because some packages have been modified but their versions haven't been updated. Please see the logs for more information"
-        )
-
-    for pkg in all_pub_pkgs:
-        if pkg2diff[pkg.name].is_version_diff:
-            logger.info("Publish package {}", pkg.name)
-            pkg.publish()
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="increase verbosity",
+)
+def publish(package: List[str], cwd: str = "", verbose: bool = False):
+    pl, cfg, pkgs = preprocessing(cwd, package, verbose)
+    pl.enforce_version_consistency()
+    pl.publish(
+        pkgs,
+        {
+            PackageType.Poetry: PyPI.get_instance(),
+        },
+    )

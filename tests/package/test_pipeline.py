@@ -1,6 +1,8 @@
-from pbt.package.package import PackageType
+from pytest_mock import MockerFixture
+from pbt.package.package import Package, PackageType
 from pbt.package.pipeline import BTPipeline
 from pbt.package.manager.poetry import Poetry
+from pbt.package.registry.registry import PkgRegistry
 from tests.conftest import PipFreezePkgInfo, Repo, get_dependencies, setup_dir
 from pbt.misc import exec
 
@@ -137,3 +139,36 @@ def test_enforce_version_consistency(repo1: Repo):
         lib2.dependencies[lib1.name][0].version_spec,
         lib3.dependencies[lib0.name][0].version_spec,
     ] == ["1.1.1", "^1.1.1", "~0.2.1", "~1.1.1"]
+
+
+def test_publish(repo1: Repo, mockup_pypi: PkgRegistry, mocker: MockerFixture):
+    pl = BTPipeline(repo1.cfg.cwd, managers={PackageType.Poetry: repo1.poetry})
+    registries = {PackageType.Poetry: mockup_pypi}
+    pl.discover()
+
+    # mock
+    stub = mocker.stub(name="publish")
+    mocker.patch.object(repo1.poetry, "publish", stub)
+
+    # call publish for the first time, nothing should happen
+    pl.publish(["lib2"], registries=registries)
+    stub.assert_not_called()
+
+    # any change will return in publish
+    repo1.poetry.next_version(pl.pkgs["lib2"], "patch")
+    pl.publish(["lib2"], registries=registries)
+    stub.assert_called_once_with(pl.pkgs["lib2"])
+
+    stub.reset_mock()
+    stub.assert_not_called()
+
+    # change in lib0 will get published as well, but lib1 is not because the version
+    # does not get updated
+    repo1.poetry.next_version(pl.pkgs["lib0"], "patch")
+    pl.publish(["lib2"], registries=registries)
+    stub.assert_has_calls(
+        [
+            mocker.call(pl.pkgs["lib0"]),
+            mocker.call(pl.pkgs["lib2"]),
+        ]
+    )

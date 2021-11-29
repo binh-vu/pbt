@@ -1,12 +1,16 @@
 import enum
 import glob
 from itertools import chain
+from operator import itemgetter
 from pathlib import Path
 from typing import Dict, List
+
+from loguru import logger
+from pbt.diff import RemoteDiff
 from pbt.package.graph import PkgGraph, ThirdPartyPackage
 from pbt.package.manager.manager import PkgManager, build_cache
-from pbt.package.manager.poetry import Poetry
 from pbt.package.package import Package, PackageType
+from pbt.package.registry.registry import PkgRegistry
 
 
 class VersionConsistent(enum.Enum):
@@ -97,7 +101,7 @@ class BTPipeline:
 
     def install(
         self,
-        pkg_names: List[str] = None,
+        pkg_names: List[str],
         include_dev: bool = False,
         editable: bool = False,
     ):
@@ -107,9 +111,6 @@ class BTPipeline:
             pkg_names: name of packages to install
             editable: whether to install those packages in editable mode
         """
-        if pkg_names is None:
-            # ensure consistent ordering
-            pkg_names = sorted(self.pkgs.keys())
         pkgs = [self.pkgs[name] for name in pkg_names]
 
         with build_cache():
@@ -146,10 +147,47 @@ class BTPipeline:
                     if isinstance(dep, Package):
                         manager.install_dependency(pkg, dep, editable=editable)
 
-    def publish(self, pkg_names: List[str] = None):
-        """Publish a package.
+    def publish(self, pkg_names: List[str], registries: Dict[PackageType, PkgRegistry]):
+        """Publish a package. Check if the package is modified but the version is not changed so
+        that we don't forget to update the version of the package.
 
         Args:
             pkg_names: name of the package to publish
+            registries: registries to publish to
         """
-        pass
+        pkgs = [self.pkgs[name] for name in pkg_names]
+
+        with build_cache():
+            publishing_pkgs = {}
+
+            for pkg in pkgs:
+                publishing_pkgs[pkg.name] = pkg
+                for dep in self.graph.dependencies(pkg.name, include_dev=False):
+                    if isinstance(dep, Package):
+                        publishing_pkgs[dep.name] = dep
+
+            diffs = {}
+
+            has_error = False
+            for pkg in publishing_pkgs.values():
+                remote_pkg_version, remote_pkg_hash = registries[
+                    pkg.type
+                ].get_latest_version_and_hash(pkg.name) or (None, None)
+                diff = RemoteDiff.from_pkg(
+                    self.managers[pkg.type], pkg, remote_pkg_version, remote_pkg_hash
+                )
+                if not diff.is_version_diff and diff.is_content_changed:
+                    logger.error(
+                        "Package {} has been modified, but its version hasn't been updated",
+                        pkg.name,
+                    )
+                    has_error = True
+                diffs[pkg.name] = diff
+            if has_error:
+                raise Exception(
+                    "Stop publishing because some packages have been modified but their versions haven't been updated. Please see the logs for more information"
+                )
+
+            for name, pkg in sorted(publishing_pkgs.items(), key=itemgetter(0)):
+                if diffs[name].is_version_diff:
+                    self.managers[pkg.type].publish(pkg)
