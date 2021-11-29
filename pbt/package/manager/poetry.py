@@ -1,31 +1,33 @@
 import glob
-from operator import attrgetter
 import os
-from contextlib import contextmanager
-from pathlib import Path
 import shutil
+import tarfile
+from contextlib import contextmanager
+from operator import attrgetter
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Optional, Union, cast
-from xml.etree.ElementInclude import include
 
 from loguru import logger
+from pytest import skip
 from pbt.config import PBTConfig
 from pbt.diff import Diff, diff_db
 from pbt.misc import cache_func, exec
-from pbt.package.manager.manager import PkgManager
+from pbt.package.manager.manager import PkgManager, build_cache
 from pbt.package.package import DepConstraint, DepConstraints, Package, PackageType
-from tomlkit.api import document, dumps, inline_table, key, loads, nl, table
-from tomlkit.items import Key, KeyType
+from tomlkit.api import document, dumps, inline_table, loads, nl, table
+from tomlkit.items import Array, Key, KeyType, Trivia
 
 
 class Poetry(PkgManager):
-    def __init__(self) -> None:
+    def __init__(self, cfg: PBTConfig) -> None:
         super().__init__()
+        self.cfg = cfg
 
     def is_package_directory(self, dir: Path) -> bool:
         return (dir / "pyproject.toml").exists()
 
     def glob_query(self, root: Path) -> str:
-        return glob(root.absolute() / "**/pyproject.toml")
+        return str(root.absolute() / "**/pyproject.toml")
 
     @contextmanager  # type: ignore
     def mask(
@@ -33,15 +35,30 @@ class Poetry(PkgManager):
         pkg: Package,
         skip_deps: List[str],
         additional_deps: Dict[str, DepConstraints],
+        disable: bool = False,
     ):
+        """Temporary mask out selected dependencies of the package. This is usually used for installing the package.
+
+        When skip_deps and additional_deps are both empty, this is a no-op.
+
+        Args:
+            pkg: The package to mask
+            skip_deps: The dependencies to skip
+            additional_deps: Additional dependencies to add
+            disable: Whether to manually disable the mask or not
+        """
+        if disable or (len(skip_deps) + len(additional_deps)) == 0:
+            yield None
+            return
+
         with open(pkg.location / "pyproject.toml", "r") as f:
             doc = cast(dict, loads(f.read()))
 
         for dep in skip_deps:
             if dep in doc["tool"]["poetry"]["dependencies"]:
-                doc["tool"]["poetry"]["dependencies"].pop(dep)
+                r = doc["tool"]["poetry"]["dependencies"].remove(dep)
             elif dep in doc["tool"]["poetry"]["dev-dependencies"]:
-                doc["tool"]["poetry"]["dev-dependencies"].pop(dep)
+                doc["tool"]["poetry"]["dev-dependencies"].remove(dep)
 
         for dep, specs in additional_deps.items():
             if dep not in doc["tool"]["poetry"]["dependencies"]:
@@ -52,14 +69,14 @@ class Poetry(PkgManager):
         try:
             os.rename(
                 pkg.location / "pyproject.toml",
-                pkg.location / "pyproject.toml.backup",
+                self.cfg.pkg_cache_dir(pkg) / "pyproject.toml",
             )
             with open(pkg.location / "pyproject.toml", "w") as f:
                 f.write(dumps(cast(Any, doc)))
             yield None
         finally:
             os.rename(
-                pkg.location / "pyproject.toml.backup",
+                self.cfg.pkg_cache_dir(pkg) / "pyproject.toml",
                 pkg.location / "pyproject.toml",
             )
 
@@ -123,6 +140,9 @@ class Poetry(PkgManager):
                 tbl = table()
                 tbl.add("name", pkg.name)
                 tbl.add("version", pkg.version)
+                tbl.add("description", "")
+                tbl.add("authors", [])
+
                 doc.add(Key("tool.poetry", t=KeyType.Bare), tbl)
 
                 tbl = table()
@@ -130,6 +150,12 @@ class Poetry(PkgManager):
                     tbl.add(dep, self.serialize_dep_specs(specs))
                 doc.add(nl())
                 doc.add(Key("tool.poetry.dependencies", t=KeyType.Bare), tbl)
+
+                tbl = table()
+                for dep, specs in pkg.dev_dependencies.items():
+                    tbl.add(dep, self.serialize_dep_specs(specs))
+                doc.add(nl())
+                doc.add(Key("tool.poetry.dev-dependencies", t=KeyType.Bare), tbl)
 
                 tbl = table()
                 tbl.add("requires", ["poetry-core>=1.0.0"])
@@ -195,7 +221,10 @@ class Poetry(PkgManager):
                     os.remove(pkg.location / "pyproject.toml.backup")
 
     def clean(self, pkg: Package):
-        raise NotImplementedError()
+        exec("poetry env remove python", cwd=pkg.location, check_returncode=False)
+        for eggdir in glob.glob(str(pkg.location / "*.egg-info")):
+            shutil.rmtree(eggdir)
+        shutil.rmtree(pkg.location / "dist", ignore_errors=True)
 
     def publish(self, pkg: Package):
         exec("poetry publish --build", cwd=pkg.location, **self.exec_options("publish"))
@@ -203,62 +232,126 @@ class Poetry(PkgManager):
     def install(
         self,
         pkg: Package,
+        editable: bool = False,
         include_dev: bool = False,
         skip_deps: List[str] = None,
         additional_deps: Dict[str, DepConstraints] = None,
     ):
-        if skip_deps is None:
-            skip_deps = []
-        if additional_deps is None:
-            additional_deps = {}
-
+        skip_deps = skip_deps or []
+        additional_deps = additional_deps or {}
         options = "--no-dev" if not include_dev else ""
 
-        if len(skip_deps) + len(additional_deps) > 0:
-            with self.mask(pkg, skip_deps, additional_deps):
-                exec(
-                    f"poetry install {options}",
-                    cwd=pkg.location,
-                    **self.exec_options("install"),
-                )
-        else:
+        with self.mask(pkg, skip_deps, additional_deps):
             exec(
                 f"poetry install {options}",
                 cwd=pkg.location,
                 **self.exec_options("install"),
             )
 
-    def build(self, pkg: Package, cfg: PBTConfig):
-        whl_file = self.wheel_path(pkg)
-        with diff_db(pkg, cfg) as db:
-            diff = Diff.from_local(db, pkg)
-            if whl_file is not None:
-                if not diff.is_modified(db):
-                    logger.debug(
-                        "Skip package {} as the content does not change", pkg.name
-                    )
-                    return False
+        if editable:
+            self.build_editable(pkg, skip_deps=skip_deps)
+            exec([self.python_path(pkg), "setup.py", "develop"], cwd=pkg.location)
+            (pkg.location / "setup.py").unlink()  # remove the setup.py file
 
-            try:
-                if (pkg.location / "dist").exists():
-                    shutil.rmtree(str(pkg.location / "dist"))
-                exec("poetry build", cwd=pkg.location)
-            finally:
-                diff.save(db)
-            return True
+    def build(
+        self,
+        pkg: Package,
+        skip_deps: List[str] = None,
+        additional_deps: Dict[str, DepConstraints] = None,
+    ):
+        """Build the package. Support ignoring some dependencies to avoid installing and solving
+        dependencies multiple times (not in the super interface as compiled languages will complain).
+        """
+        with build_cache() as built_pkgs:
+            skip_deps = skip_deps or []
+            additional_deps = additional_deps or {}
 
-    def compute_pkg_hash(
-        self, pkg: Package, cfg: PBTConfig, no_build: bool = False
-    ) -> str:
+            build_ident = (pkg.name, pkg.version)
+            build_opts = (tuple(skip_deps), tuple(sorted(additional_deps.keys())))
+            if built_pkgs.get(build_ident, None) == build_opts:
+                return
+
+            with diff_db(pkg, self.cfg) as db:
+                with self.mask(pkg, skip_deps, additional_deps):
+                    diff = Diff.from_local(db, self, pkg)
+                    if (
+                        self.wheel_path(pkg) is not None
+                        and self.tar_path(pkg) is not None
+                    ):
+                        if not diff.is_modified(db):
+                            built_pkgs[build_ident] = build_opts
+                            return
+
+                    try:
+                        if (pkg.location / "dist").exists():
+                            shutil.rmtree(str(pkg.location / "dist"))
+                        exec("poetry build", cwd=pkg.location)
+                    finally:
+                        diff.save(db)
+
+                    built_pkgs[build_ident] = build_opts
+
+    def build_editable(
+        self,
+        pkg: Package,
+        skip_deps: List[str],
+    ):
+        """Build egg package that can be used to install in editable mode as poetry does not
+        provide it out of the box.
+
+        Args:
+            pkg: Package to build
+            skip_deps: The dependencies to ignore when building the package
+        """
+        # need to remove the `.egg-info` folders first as it will interfere with the version (ContextualVersionConflict)
+        for eggdir in glob.glob(str(pkg.location / "*.egg-info")):
+            shutil.rmtree(eggdir)
+
+        self.build(pkg, skip_deps)
+
+        tar_path = self.tar_path(pkg)
+        assert tar_path is not None
+        with tarfile.open(tar_path, "r") as g:
+            member = g.getmember(f"{pkg.name}-{pkg.version}/setup.py")
+            with open(pkg.location / "setup.py", "wb") as f:
+                memberfile = g.extractfile(member)
+                assert memberfile is not None
+                f.write(memberfile.read())
+
+    def compute_pkg_hash(self, pkg: Package) -> str:
         """Compute hash of the content of the package"""
-        if not no_build:
-            self.build(pkg, cfg)
+        self.build(pkg)
         whl_path = self.wheel_path(pkg)
         assert whl_path is not None
-        output = "".join(exec(["pip", "hash", whl_path]))
+        output = exec(["pip", "hash", whl_path])[1]
         output = output[output.find("--hash=") + len("--hash=") :]
         assert output.startswith("sha256:")
         return output[len("sha256:") :]
+
+    def install_dependency(
+        self,
+        pkg: Package,
+        dependency: Package,
+        editable: bool = False,
+        skip_dep_deps: List[str] = None,
+    ):
+        skip_dep_deps = skip_dep_deps or []
+        exec([self.pip_path(pkg), "uninstall", "-y", dependency.name])
+
+        if editable:
+            self.build_editable(dependency, skip_deps=skip_dep_deps)
+            exec(
+                [self.python_path(pkg), "setup.py", "develop"], cwd=dependency.location
+            )
+            (dependency.location / "setup.py").unlink()  # remove the setup.py file
+        else:
+            self.build(
+                dependency,
+                skip_deps=skip_dep_deps,
+            )
+            whl_path = self.wheel_path(dependency)
+            assert whl_path is not None
+            exec([self.pip_path(pkg), "install", whl_path])
 
     @cache_func()
     def env_path(self, name: str, dir: Path) -> Path:
@@ -284,7 +377,7 @@ class Poetry(PkgManager):
                 name,
             )
 
-        if output[0].rstrip().endswith(" (Activated)"):
+        if output[0].endswith(" (Activated)"):
             path = output[0].split(" ")[0]
         else:
             path = output[0]
@@ -298,7 +391,9 @@ class Poetry(PkgManager):
         return None
 
     def wheel_path(self, pkg: Package) -> Optional[Path]:
-        whl_files = glob(str(pkg.location / f"dist/{pkg.name.replace('-', '_')}*.whl"))
+        whl_files = glob.glob(
+            str(pkg.location / f"dist/{pkg.name.replace('-', '_')}*.whl")
+        )
         if len(whl_files) == 0:
             return None
         return Path(whl_files[0])
@@ -306,7 +401,7 @@ class Poetry(PkgManager):
     def pip_path(self, pkg: Package) -> Path:
         return self.env_path(pkg.name, pkg.location) / "bin/pip"  # type: ignore
 
-    def python_path(self) -> Path:
+    def python_path(self, pkg: Package) -> Path:
         return self.env_path(pkg.name, pkg.location) / "bin/python"  # type: ignore
 
     def exec_options(
@@ -338,7 +433,7 @@ class Poetry(PkgManager):
                 origin_spec=origin_spec,
             )
 
-    def serialize_dep_specs(self, specs: DepConstraints) -> List[str]:
+    def serialize_dep_specs(self, specs: DepConstraints):
         items = []
         for spec in specs:
             if spec.origin_spec is None:
@@ -348,4 +443,8 @@ class Poetry(PkgManager):
                 item[cast(str, spec.version_spec_field)] = spec.version_spec
                 for k, v in spec.origin_spec.items():
                     item[k] = v
-        return items
+            items.append(item)
+
+        if len(items) == 1:
+            return items[0]
+        return Array(items, Trivia(), multiline=True)

@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from itertools import chain
 import networkx as nx
 from typing import Dict, Iterable, List, Type, Union
-from __future__ import annotations
+
 from pbt.package.package import Package, DepConstraints, PackageType
 
 
@@ -75,13 +77,14 @@ class PkgGraph:
             pkg_name: The package to get the dependencies of.
             include_dev: Whether to include dev dependencies.
         """
-        successors = nx.dfs_successors(self.g, pkg_name)
+        nodes = nx.dfs_preorder_nodes(self.g, pkg_name)
         if include_dev:
-            return [self.g[uid]["pkg"] for uid in successors.keys()]
+            return [self.g[uid]["pkg"] for uid in nodes]
 
         lst = []
-        for vid, parents in successors.items():
-            if all(self.g[uid][vid]["is_dev"] for uid in parents):
+        for vid in nodes:
+            predecessors = self.g.predecessors(vid)
+            if all(self.g[uid][vid]["is_dev"] for uid in predecessors):
                 continue
-            lst.append(self.g[vid]["pkg"])
+            lst.append(self.g.nodes[vid]["pkg"])
         return lst

@@ -5,6 +5,7 @@ from typing import Set, Union
 from loguru import logger
 
 import orjson
+from pbt.package.package import Package
 
 PBT_CONFIG_FILE_NAME = "pbtconfig.json"
 PBT_LOCK_FILE_NAME = "pbt.lock"
@@ -18,9 +19,11 @@ class PBTConfig:
 
     @staticmethod
     def from_dir(cwd: Union[Path, str]) -> "PBTConfig":
+        # get git top module
+        # TODO: replace me
+
         def is_valid_cwd(wd: Union[Path, str]):
-            pbt_file = os.path.join(wd, PBT_CONFIG_FILE_NAME)
-            return os.path.exists(pbt_file)
+            return False
 
         error = True
         if cwd == "":
@@ -54,3 +57,11 @@ class PBTConfig:
             ignore_packages=set(cfg.get("ignore_packages", [])),
             cache_dir=cache_dir,
         )
+
+    def pkg_cache_dir(self, pkg: Package) -> Path:
+        """Get the cache directory for a package that we can use for storing temporary files
+        during building and installing packages
+        """
+        pkg_dir = self.cache_dir / pkg.name
+        pkg_dir.mkdir(exist_ok=True, parents=True)
+        return pkg_dir

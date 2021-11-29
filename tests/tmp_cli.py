@@ -5,8 +5,6 @@ from pytest_mock import MockerFixture
 from pbt.cli import make, update, publish
 from tests.conftest import get_dependencies, setup_dir, PipFreezePkgInfo
 
-from pbt.package import search_packages
-
 
 def invoke_lib0(lib, lib0):
     return (
@@ -202,20 +200,20 @@ def test_publish(repo1, mocker: MockerFixture):
     # note: patch in the place where the function is used
     mocker.patch("pbt.cli.search_packages", return_value=repo1.packages)
     # call publish for the first time, nothing should happen
-    publish([
-        "-p", repo1.packages["lib2"].name,
-        "--cwd", repo1.cfg.cwd
-    ], standalone_mode=False)
+    publish(
+        ["-p", repo1.packages["lib2"].name, "--cwd", repo1.cfg.cwd],
+        standalone_mode=False,
+    )
     for lib in ["lib0", "lib1", "lib2", "lib3"]:
         mock_publish_funcs[lib].assert_not_called()
 
     # update version can call again, they should be publish
     for lib in ["lib0", "lib1", "lib2"]:
         repo1.packages[lib].next_version("patch")
-    publish([
-        "-p", repo1.packages["lib2"].name,
-        "--cwd", repo1.cfg.cwd
-    ], standalone_mode=False)
+    publish(
+        ["-p", repo1.packages["lib2"].name, "--cwd", repo1.cfg.cwd],
+        standalone_mode=False,
+    )
     for lib in ["lib0", "lib1", "lib2"]:
         mock_publish_funcs[lib].assert_called_once()
     mock_publish_funcs["lib3"].assert_not_called()

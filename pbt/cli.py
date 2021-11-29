@@ -12,7 +12,8 @@ from loguru import logger
 from pbt.config import PBTConfig
 from pbt.diff import RemoteDiff
 from pbt.git import Git
-from pbt.package import search_packages, topological_sort, update_versions
+
+# from pbt.package import search_packages, topological_sort, update_versions
 from pbt.pypi import PyPI
 
 
@@ -224,7 +225,7 @@ def publish(package: str, cwd: str = ""):
 def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
     """Execute Git commands in a super-project"""
     cwd = os.path.abspath(cwd)
-    
+
     if subcommand == "clone":
         assert repo.endswith(".git"), f"Invalid repository: `{repo}`"
 
@@ -240,7 +241,7 @@ def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
         # checkout the submodule to the correct branch
         for submodule in Git.find_submodules(cwd):
             logger.info("Checkout submodule {}", submodule)
-            Git.auto_checkout_branch(submodule) 
+            Git.auto_checkout_branch(submodule)
     elif subcommand == "snapshot":
         pbt_cfg = PBTConfig.from_dir(cwd)
         cwd = str(pbt_cfg.cwd.absolute())

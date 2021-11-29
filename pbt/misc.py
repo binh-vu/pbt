@@ -3,6 +3,10 @@ import subprocess
 from typing import Callable, List, Union
 
 
+class ExecProcessError(Exception):
+    pass
+
+
 def stdout(line):
     """Print line to stdout"""
     print(line, end="")
@@ -15,7 +19,7 @@ def exec(
     cwd: Union[Path, str] = "./",
 ) -> List[str]:
     """
-    Execute a command and return the output.
+    Execute a command and return the list of lines, in which the newline character is stripped away.
 
     Args:
         cmd: Command to execute.
@@ -40,6 +44,7 @@ def exec(
         assert p.stdout is not None
         line = p.stdout.readline().decode("utf-8")
         if line != "":
+            line = line[:-1]
             output.append(line)
             handler(line)
         elif p.poll() is not None:
@@ -47,7 +52,10 @@ def exec(
 
     returncode = p.returncode
     if check_returncode and returncode != 0:
-        raise subprocess.CalledProcessError(returncode, cmd, "".join(output))
+        msg = f"Command: f{cmd} returns non-zero exit status {returncode}\n" + "".join(
+            output
+        )
+        raise ExecProcessError(msg)
 
     return output
 
