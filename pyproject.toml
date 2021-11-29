@@ -5,6 +5,7 @@ description = "A build tool for multi-projects that leverages package registries
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"
 repository = "https://github.com/binh-vu/pbt"
+readme = "README.md"
 license = "MIT"
 packages = [
     { include = "pbt" }
@@ -26,7 +27,6 @@ click = "^8.0.3"
 typing-extensions = "^4.0.0"
 networkx = "^2.6.3"
 lbry-rocksdb-optimized = "^0.8.1"
-hugedict = ">=1.0.1"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^21.11b1", allow-prereleases = true}
