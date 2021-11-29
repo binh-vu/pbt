@@ -1,11 +1,7 @@
 from contextlib import contextmanager
 from typing import Optional
 
-from pbt.package2 import Package
-from pbt.pypi import PyPI
-
-
-from pbt.pypi import PyPI
+from pbt.package.registry.pypi import PyPI
 
 
 class PyPIMockUp(PyPI):

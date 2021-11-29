@@ -12,9 +12,9 @@ from typing import Dict, List, Optional, Union
 import pytest
 from loguru import logger
 from pbt.config import PBTConfig
-from pbt.git import Git
+from pbt.vcs.git import Git
 from pbt.package import manager
-from pbt.pypi import PyPI
+from pbt.package.registry.pypi import PyPI
 
 from pbt.package.package import DepConstraint, Package, PackageType
 from pbt.package.manager.poetry import Poetry

@@ -1,8 +1,8 @@
 from typing import Any, Optional, Dict, Tuple
 import requests
 import semver
+from pbt.package.manager.manager import PkgManager
 
-from pbt.version import parse_version
 from pbt.package.registry.registry import PkgRegistry
 
 PYPI_INDEX = "https://pypi.org"
@@ -57,7 +57,7 @@ class PyPI(PkgRegistry):
             return None
 
         releases: Dict[str, Any] = pkg_info["releases"]
-        latest_version = max(releases.keys(), key=parse_version)
+        latest_version = max(releases.keys(), key=PkgManager.parse_version)
         whl_hash = self.get_whl_hash(pkg_name, latest_version)
         assert whl_hash is not None
         return latest_version, whl_hash

@@ -273,7 +273,8 @@ class PkgManager(ABC):
         return f"{groups[0]}{str(version)}"
 
     @cache_func()
-    def parse_version(self, version: str) -> semver.VersionInfo:
+    @staticmethod
+    def parse_version(version: str) -> semver.VersionInfo:
         m = re.match(r"^\d+(?P<minor>\.\d+)?$", version)
         if m is not None:
             if m.group("minor") is None:

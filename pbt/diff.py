@@ -11,7 +11,7 @@ from loguru import logger
 from rocksdb import DB, Options, WriteBatch  # type: ignore
 
 from pbt.config import PBTConfig
-from pbt.git import Git, GitFileStatus
+from pbt.vcs.git import Git, GitFileStatus
 from pbt.package.manager.manager import PkgManager
 from pbt.package.package import Package
 
