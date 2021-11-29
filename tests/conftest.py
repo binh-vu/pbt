@@ -171,7 +171,7 @@ def mockup_pypi():
     pypi = PyPI.get_instance()
     default_index = pypi.index
     PyPI.instances[default_index] = PyPIMockUp(default_index)
-    yield
+    yield PyPI.instances[default_index]
     PyPI.instances[default_index] = pypi
 
 
