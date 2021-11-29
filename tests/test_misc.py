@@ -1,26 +1,32 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from pbt.config import PBTConfig
 from pbt.misc import exec
-from pbt.package import Package, PackageType
-from tests.conftest import setup_poetry
+from pbt.package.manager.poetry import Poetry
+from pbt.package.package import Package, PackageType
+
 
 def test_exec():
-    assert exec(["echo", "hello world"]) == ["hello world\n"]
-    assert exec("echo") == ["\n"]
+    assert exec(["echo", "hello world"]) == ["hello world"]
+    assert exec("echo") == [""]
 
     # test command that output nothing
     with TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        (tmpdir / ".cache").mkdir(parents=True, exist_ok=True)
+
+        cfg = PBTConfig(cwd=tmpdir, cache_dir=tmpdir / ".cache", ignore_packages=set())
+        poetry = Poetry(cfg)
+
         pkg = Package(
             name="test",
-            type=PackageType.Poetry,
-            dir=Path(tmpdir),
             version="0.0.1",
+            type=PackageType.Poetry,
+            location=Path(tmpdir),
             include=[],
             exclude=[],
             dependencies={},
-            inter_dependencies=[],
-            invert_inter_dependencies=[],
+            dev_dependencies={},
         )
-        setup_poetry(pkg)
+        poetry.save(pkg)
         assert exec("poetry env list --full-path", cwd=tmpdir) == []
-

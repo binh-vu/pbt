@@ -6,15 +6,14 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from uuid import uuid4
 
 import orjson
-from rocksdb import DB, Options, WriteBatch  # type: ignore
 import semver
 from loguru import logger
+from rocksdb import DB, Options, WriteBatch  # type: ignore
 
 from pbt.config import PBTConfig
 from pbt.git import Git, GitFileStatus
-
+from pbt.package.manager.manager import PkgManager
 from pbt.package.package import Package
-from pbt.package.manager import PkgManager
 
 # file size limit
 SOFT_SIZE_LIMIT = (1024 ** 2) * 1  # 1MB
@@ -23,9 +22,9 @@ DIFF_DB_CACHE = {}
 
 
 @contextmanager
-def diff_db(pkg: "Package", cfg: PBTConfig, new_connection: bool = False) -> DB:
+def diff_db(pkg: Package, cfg: PBTConfig, new_connection: bool = False) -> DB:
     global DIFF_DB_CACHE
-    db_file = str(cfg.cache_dir / f"{pkg.name}.db")
+    db_file = str(cfg.pkg_cache_dir(pkg) / "diff.db")
     if new_connection:
         client = DB(db_file, Options(create_if_missing=True))
         try:
@@ -38,8 +37,8 @@ def diff_db(pkg: "Package", cfg: PBTConfig, new_connection: bool = False) -> DB:
         yield DIFF_DB_CACHE[db_file]
 
 
-def remove_diff_db(pkg: "Package", cfg: PBTConfig):
-    db_file = cfg.cache_dir / f"{pkg.name}.db"
+def remove_diff_db(pkg: Package, cfg: PBTConfig):
+    db_file = cfg.pkg_cache_dir(pkg) / "diff.db"
     if db_file.exists():
         shutil.rmtree(db_file)
 
@@ -52,17 +51,17 @@ class Diff:
     # content of the changed files, serving as a cache, does not guarantee to have
     # all of the non-deleted files, if the content of a changed file is None, it's
     # mean the value does not change since the last snapshot
-    changed_files_content: Dict[str, Optional[str]]
+    changed_files_content: Dict[str, Optional[bytes]]
 
     @staticmethod
-    def from_local(db: DB, pkg: "Package") -> "Diff":
+    def from_local(db: DB, manager: PkgManager, pkg: Package) -> "Diff":
         """Compute diff of a current package, i.e., which files of a package have been modified"""
         commit_id = Git.get_current_commit(pkg.location)
 
         # TODO: make this code to get changed files more efficient
         changed_files = Git.get_new_modified_deleted_files(pkg.location)
         include_files = set(
-            pkg.filter_included_files([file.fpath for file in changed_files])
+            manager.filter_included_files(pkg, [file.fpath for file in changed_files])
         )
         changed_files = sorted(
             [file for file in changed_files if file.fpath in include_files]
@@ -95,6 +94,7 @@ class Diff:
                 file_content = read_file(file.fpath)
             else:
                 file_content = self.changed_files_content[file.fpath]
+
             if prev_file_content != file_content:
                 self.changed_files_content[file.fpath] = file_content
                 return True
@@ -141,8 +141,7 @@ class RemoteDiff:
     @staticmethod
     def from_pkg(
         manager: PkgManager,
-        pkg: "Package",
-        cfg: PBTConfig,
+        pkg: Package,
         remote_version: Optional[str] = None,
         remote_version_hash: Optional[str] = None,
     ) -> "RemoteDiff":
@@ -159,7 +158,7 @@ class RemoteDiff:
 
         # TODO: replace the approximation algorithm (checking hash) with exact algorithm
         # that determine if the content is the same
-        pkg_hash = manager.compute_pkg_hash(pkg, cfg)
+        pkg_hash = manager.compute_pkg_hash(pkg)
         return RemoteDiff(
             is_version_diff=False, is_content_changed=pkg_hash != remote_version_hash
         )

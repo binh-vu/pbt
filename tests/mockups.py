@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Optional
 
-from pbt.package import Package
+from pbt.package2 import Package
 from pbt.pypi import PyPI
 
 
@@ -12,24 +12,12 @@ class PyPIMockUp(PyPI):
     def __init__(self, index: str):
         super().__init__(index)
         self.pkgs = {
-            "polyrepo-bt": {
-                "releases": {
-                    "0.2.0": [
-                        {
-                            "digests": {
-                                "sha256": "dc4aa3ab5277b0c61b252728c2a1b46d0ab9bb061a1e5eaddfb5bd8507b500bf"
-                            },
-                            "filename": "polyrepo_bt-0.2.0-py3-none-any.whl",
-                        }
-                    ]
-                }
-            },
             "lib0": {
                 "releases": {
                     "0.5.1": [
                         {
                             "digests": {
-                                "sha256": "992ba88cd81bd02920127f6e7dd990f220bbfa2464bfedcb4baa44df249ea07e"
+                                "sha256": "9b28e6634400d7ff30c60dc93f2dfe8d036a03ee93fc87ae1c37cda57d085280"
                             },
                             "filename": "lib0-0.5.1-py3-none-any.whl",
                         }
@@ -71,7 +59,7 @@ class PyPIMockUp(PyPI):
                         }
                     ]
                 }
-            }
+            },
         }
 
     def fetch_pkg_info(self, pkg_name: str) -> Optional[dict]:

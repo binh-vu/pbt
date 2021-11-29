@@ -4,7 +4,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Dict, List
 from pbt.package.graph import PkgGraph, ThirdPartyPackage
-from pbt.package.manager.manager import PkgManager
+from pbt.package.manager.manager import PkgManager, build_cache
 from pbt.package.manager.poetry import Poetry
 from pbt.package.package import Package, PackageType
 
@@ -27,7 +27,7 @@ class BTPipeline:
         """Discover packages in the project."""
         pkgs = {}
         for manager in self.managers.values():
-            for fpath in manager.glob_query(self.root):
+            for fpath in glob.glob(manager.glob_query(self.root)):
                 pkg = manager.load(Path(fpath).parent)
                 if pkg.name in pkgs:
                     raise RuntimeError(f"Duplicate package {pkg.name}")
@@ -112,35 +112,39 @@ class BTPipeline:
             pkg_names = sorted(self.pkgs.keys())
         pkgs = [self.pkgs[name] for name in pkg_names]
 
-        for pkg in pkgs:
-            manager = self.managers[pkg.type]
-            # gather all dependencies in one file and install it.
-            deps = self.graph.dependencies(pkg.name, include_dev=include_dev)
+        with build_cache():
+            for pkg in pkgs:
+                manager = self.managers[pkg.type]
+                # gather all dependencies in one file and install it.
+                deps = self.graph.dependencies(pkg.name, include_dev=include_dev)
 
-            skip_deps = [
-                dep.name
-                for dep in deps
-                if isinstance(dep, Package)
-                and (dep.name in pkg.dependencies or dep.name in pkg.dev_dependencies)
-            ]
-            additional_deps = {
-                dep.name: next(iter(dep.invert_dependencies.values()))
-                for dep in deps
-                if isinstance(dep, ThirdPartyPackage)
-                and dep.name not in pkg.dependencies
-                and dep.name not in pkg.dev_dependencies
-            }
+                skip_deps = [
+                    dep.name
+                    for dep in deps
+                    if isinstance(dep, Package)
+                    and (
+                        dep.name in pkg.dependencies or dep.name in pkg.dev_dependencies
+                    )
+                ]
+                additional_deps = {
+                    dep.name: next(iter(dep.invert_dependencies.values()))
+                    for dep in deps
+                    if isinstance(dep, ThirdPartyPackage)
+                    and dep.name not in pkg.dependencies
+                    and dep.name not in pkg.dev_dependencies
+                }
 
-            manager.install(
-                pkg,
-                include_dev=include_dev,
-                skip_deps=skip_deps,
-                additional_deps=additional_deps,
-            )
+                manager.install(
+                    pkg,
+                    editable=editable,
+                    include_dev=include_dev,
+                    skip_deps=skip_deps,
+                    additional_deps=additional_deps,
+                )
 
-            for dep in deps:
-                if isinstance(dep, Package):
-                    manager.install(dep)
+                for dep in deps:
+                    if isinstance(dep, Package):
+                        manager.install_dependency(pkg, dep, editable=editable)
 
     def publish(self, pkg_names: List[str] = None):
         """Publish a package.

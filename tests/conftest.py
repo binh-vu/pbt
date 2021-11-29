@@ -1,23 +1,26 @@
+from functools import partial
 import os
 import re
-import sys
-from operator import attrgetter
-
-from pbt.poetry import Poetry
-from pbt.pypi import PyPI
 import shutil
-import subprocess
+import sys
 from dataclasses import asdict, dataclass
+from operator import attrgetter
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Dict, List, Optional, Union
 
 import pytest
-from typing import Dict, Union, List, Optional
-import toml
 from loguru import logger
-
 from pbt.config import PBTConfig
 from pbt.git import Git
-from pbt.package import Package, PackageType, load_package
+from pbt.package import manager
+from pbt.pypi import PyPI
+
+from pbt.package.package import DepConstraint, Package, PackageType
+from pbt.package.manager.poetry import Poetry
+from pbt.package.manager.manager import PkgManager
+
+from pbt.misc import exec
 from tests.mockups import PyPIMockUp
 
 File = str
@@ -28,6 +31,17 @@ Directory = Dict[str, Union[File, "Directory"]]
 class Repo:
     cfg: PBTConfig
     packages: Dict[str, Package]
+    poetry: Poetry
+
+    def reload_pkgs(self):
+        for pkg in self.packages.values():
+            tmp = self.poetry.load(pkg.location)
+            pkg.name = tmp.name
+            pkg.version = tmp.version
+            pkg.dependencies = tmp.dependencies
+            pkg.dev_dependencies = tmp.dev_dependencies
+            pkg.include = tmp.include
+            pkg.exclude = tmp.exclude
 
 
 @dataclass
@@ -42,6 +56,7 @@ class PipFreezePkgInfo:
             isinstance(other, PipFreezePkgInfo)
             and self.name == other.name
             and self.editable == other.editable
+            and self.version == other.version
         )
 
 
@@ -66,28 +81,8 @@ def setup_dir(dir: Directory, cwd: Union[Path, str]):
             setup_dir(item, cwd / name)
 
 
-def setup_poetry(pkg: Package):
-    with open(pkg.dir / "pyproject.toml", "w") as f:
-        toml.dump(
-            {
-                "tool": {
-                    "poetry": {
-                        "name": pkg.name,
-                        "description": "",
-                        "authors": ["Tester <tester@pbt.com>"],
-                        "version": pkg.version,
-                        "dependencies": pkg.dependencies,
-                    }
-                }
-            },
-            f,
-        )
-
-
 def get_dependencies(pip_file: Union[str, Path]) -> List[PipFreezePkgInfo]:
-    lines = subprocess.check_output([pip_file, "freeze"]).decode().strip().split("\n")
-    if len(lines) == 1 and lines[0] == "":
-        return []
+    lines = exec([pip_file, "freeze"])
 
     pkg_name = r"(?P<pkg>[a-zA-Z0-9-_]+)"
     pkgs = []
@@ -97,7 +92,7 @@ def get_dependencies(pip_file: Union[str, Path]) -> List[PipFreezePkgInfo]:
         if line.startswith("#"):
             # expect the next one is editable
             m = re.match(
-                rf"# Editable Git install with no remote \({pkg_name}==(?P<version>[^)]+)\)",
+                rf"# Editable(?: Git)? install with no (?:remote|version control) \({pkg_name}==(?P<version>[^)]+)\)",
                 line,
             )
             assert m is not None, f"`{line}`"
@@ -107,13 +102,20 @@ def get_dependencies(pip_file: Union[str, Path]) -> List[PipFreezePkgInfo]:
             assert m2 is not None, f"`{line}`"
             pkgs.append(
                 PipFreezePkgInfo(
-                    name=m.group("pkg"), editable=True, path=m2.group("path")
+                    name=m.group("pkg"),
+                    editable=True,
+                    version=m.group("version"),
+                    path=m2.group("path"),
                 )
             )
         elif line.find(" @ ") != -1:
             m = re.match(rf"{pkg_name} @ (?P<path>.+)", line)
             assert m is not None, f"`{line}`"
-            pkgs.append(PipFreezePkgInfo(name=m.group("pkg"), path=m.group("path")))
+            path = m.group("path")
+            version = Path(path).name.split("-")[1]
+            pkgs.append(
+                PipFreezePkgInfo(name=m.group("pkg"), version=version, path=path)
+            )
         else:
             m = re.match(rf"{pkg_name}==(?P<version>.+)", line)
             assert m is not None, f"`{line}`"
@@ -125,6 +127,45 @@ def get_dependencies(pip_file: Union[str, Path]) -> List[PipFreezePkgInfo]:
     return sorted(pkgs, key=attrgetter("name"))
 
 
+def get_dependency(pip_file: Union[str, Path], name: str) -> Optional[PipFreezePkgInfo]:
+    deps = get_dependencies(pip_file)
+    for dep in deps:
+        if dep.name == name:
+            return dep
+    return None
+
+
+def pylib(cwd, name, version, deps=None, dev_deps=None):
+    def dcon(version):
+        if isinstance(version, list):
+            return [
+                DepConstraint(
+                    version_spec=v["version"],
+                    constraint=v["python"],
+                    version_spec_field="version",
+                    origin_spec={x: y for x, y in v.items() if x != "version"},
+                )
+                for v in version
+            ]
+        return [DepConstraint(version)]
+
+    (cwd / name).mkdir(exist_ok=True, parents=True)
+
+    return Package(
+        name=name,
+        type=PackageType.Poetry,
+        location=cwd / name,
+        version=version,
+        dependencies=dict(
+            python=dcon(f"^{sys.version_info.major}.{sys.version_info.minor}"),
+            **{k: dcon(v) for k, v in (deps or {}).items()},
+        ),
+        dev_dependencies={k: dcon(v) for k, v in (dev_deps or {}).items()},
+        include=[name],
+        exclude=[],
+    )
+
+
 @pytest.fixture
 def mockup_pypi():
     pypi = PyPI.get_instance()
@@ -134,114 +175,119 @@ def mockup_pypi():
     PyPI.instances[default_index] = pypi
 
 
-@pytest.fixture(scope="session")
-def pbt_lib() -> Package:
-    cwd = Path("/tmp/pbt-0.2.0/polyrepo-bt-0.2.0")
-    if not cwd.exists():
-        cwd.parent.mkdir(exist_ok=True)
-        pkg = PyPI.get_instance().fetch_pkg_info("polyrepo-bt")
-        for release in pkg["releases"]["0.2.0"]:
-            if release["filename"].endswith(".tar.gz"):
-                url = release["url"]
-                subprocess.check_output(["wget", url], cwd=cwd.parent)
-                subprocess.check_output(
-                    ["tar", "-xzf", "polyrepo-bt-0.2.0.tar.gz"], cwd=cwd.parent
-                )
-        os.remove(cwd / "PKG-INFO")
-    return load_package(cwd)
+def make_pyrepo(cwd: Path, libs: List[Package], submodules: List[Package]):
+    if cwd.exists():
+        shutil.rmtree(cwd)
+
+    cache_dir = cwd / ".cache"
+    cache_dir.mkdir(parents=True)
+
+    cfg = PBTConfig(cwd, cache_dir, ignore_packages=set())
+
+    # setup project directory
+    tree = {}
+    for lib in libs:
+        tree[lib.name] = {
+            lib.name: {"__init__.py": "", "__main__.py": f"print('{lib.name}')"}
+        }
+    setup_dir(tree, cwd)
+
+    # clean previous environments if have
+    poetry = Poetry(cfg)
+    for lib in libs:
+        poetry.save(lib)
+        poetry.clean(lib)
+
+    # setup git
+    Git.init(cwd)
+    for lib in submodules:
+        Git.init(lib.location)
+        Git.commit_all(lib.location)
+        exec(["git", "submodule", "add", "./" + lib.name, lib.name], cwd=cwd)
+    Git.commit_all(cwd)
+
+    return Repo(
+        cfg=cfg,
+        packages={lib.name: lib for lib in libs},
+        poetry=poetry,
+    )
 
 
 @pytest.fixture
-def repo1(pbt_lib, mockup_pypi):
+def repo1(mockup_pypi):
     """
     Dependency graph
         lib 1 -> lib 0
         lib 2 -> lib 1
         lib 3 -> lib 1 & lib 0
+        lib 4 -> lib
 
-    lib 0 & lib 1 & lib 2 are git submodules
+    only lib 0 & lib 1 & lib 2 are git submodules
 
     """
-    cwd = Path("/tmp/pbt/repo1")
-    cache_dir = Path("/tmp/pbt/repo1.cache")
+    with TemporaryDirectory() as tmpdir:
+        cwd = Path(tmpdir)
+        # cwd = Path("/tmp/pbt/project1")
 
-    if cwd.exists():
-        shutil.rmtree(cwd)
-
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir)
-
-    cwd.mkdir(parents=True)
-    cache_dir.mkdir(parents=True)
-
-    shutil.copytree(pbt_lib.dir, cwd / "pbt")
-    pbt_lib = Package(**asdict(pbt_lib))
-    pbt_lib.dir = cwd / "pbt"
-
-    Git.init(cwd)
-
-    def get_lib(name, version, deps):
-        return Package(
-            name=name,
-            type=PackageType.Poetry,
-            dir=cwd / name,
-            version=version,
-            dependencies=dict(
-                python=f"^{sys.version_info.major}.{sys.version_info.minor}", **deps
-            ),
-            include=[name],
-            exclude=[],
-            inter_dependencies=[],
-            invert_inter_dependencies=[],
+        setup_dir(
+            {
+                "scripts": {"helloworld.py": "print('hello world')"},
+                "pbtconfig.json": "{}",
+            },
+            cwd,
         )
 
-    lib0 = get_lib("lib0", "0.5.1", {})
-    lib1 = get_lib("lib1", "0.2.1", {lib0.name: "^" + lib0.version})
-    lib2 = get_lib("lib2", "0.6.7", {lib1.name: "~" + lib1.version})
-    lib3 = get_lib(
-        "lib3", "0.1.4", {lib0.name: "~" + lib0.version, lib1.name: "~" + lib1.version}
-    )
-
-    lib0.invert_inter_dependencies = [lib1, lib3]
-    lib1.invert_inter_dependencies = [lib2]
-    lib1.inter_dependencies = [lib0]
-    lib2.inter_dependencies = [lib1]
-    lib3.inter_dependencies = [lib0, lib1]
-
-    setup_dir(
-        {
-            "lib0": {
-                "lib0": {"__init__.py": "", "main.py": "print('lib0')"},
-            },
-            "lib1": {
-                "lib1": {"__init__.py": "", "main.py": "print('lib1')"},
-            },
-            "lib2": {
-                "lib2": {"__init__.py": "", "main.py": "print('lib2')"},
-            },
-            "lib3": {
-                "lib3": {"__init__.py": "", "main.py": "print('lib3')"},
-            },
-            "scripts": {"helloworld.py": "print('hello world')"},
-            "pbtconfig.json": "{}",
-        },
-        cwd,
-    )
-
-    for lib in [lib0, lib1, lib2, lib3]:
-        setup_poetry(lib)
-        # clean installed virtual env if have
-        Poetry(lib).destroy()
-
-    for lib in [lib0, lib1, lib2]:
-        Git.init(lib.dir)
-        Git.commit_all(lib.dir)
-        subprocess.check_output(
-            ["git", "submodule", "add", "./" + lib.name, lib.name], cwd=cwd
+        get_lib = partial(pylib, cwd)
+        lib0 = get_lib("lib0", "0.5.1")
+        lib1 = get_lib("lib1", "0.2.1", {lib0.name: "^" + lib0.version})
+        lib2 = get_lib("lib2", "0.6.7", {lib1.name: "~" + lib1.version})
+        lib3 = get_lib(
+            "lib3",
+            "0.1.4",
+            {lib0.name: "~" + lib0.version, lib1.name: "~" + lib1.version},
         )
 
-    Git.commit_all(cwd)
-    yield Repo(
-        cfg=PBTConfig(cwd, cache_dir, ignore_packages=set()),
-        packages={lib.name: lib for lib in [lib0, lib1, lib2, lib3, pbt_lib]},
-    )
+        yield make_pyrepo(
+            cwd, libs=[lib0, lib1, lib2, lib3], submodules=[lib0, lib1, lib2]
+        )
+
+
+@pytest.fixture
+def repo2(mockup_pypi):
+    """
+    Dependency graph
+        lib 1 -> lib 0
+        lib 2 -> lib 1
+        lib 3 -> lib 1
+        lib 4 -> lib 1
+        lib 5 -> lib 1
+        lib 10 -> lib 1 (however, it's impossible to fulfill version requirement)
+
+    no libraries are submodules
+
+    """
+    with TemporaryDirectory() as tmpdir:
+        cwd = Path(tmpdir)
+        # cwd = Path("/tmp/pbt/project2")
+
+        setup_dir(
+            {
+                "scripts": {"helloworld.py": "print('hello world')"},
+                "pbtconfig.json": "{}",
+            },
+            cwd,
+        )
+
+        get_lib = partial(pylib, cwd)
+        lib0 = get_lib("lib0", "0.5.5")
+        lib1 = get_lib(
+            "lib1", "0.2.1", {lib0.name: "^0.5.1"}
+        )  # do not change lib0 version requirement
+        lib2 = get_lib("lib2", "0.6.7", {lib1.name: "^" + lib1.version})
+        lib3 = get_lib("lib3", "1.6.7", {lib1.name: "^" + lib1.version})
+        lib4 = get_lib("lib4", "1.6.7", {lib1.name: "^" + lib1.version})
+        lib5 = get_lib("lib5", "1.6.7", {lib1.name: "^" + lib1.version})
+        lib10 = get_lib("lib10", "9.0.0", {lib1.name: ">= 1.1.2"})
+
+        libs = [lib0, lib1, lib2, lib3, lib4, lib5, lib10]
+        yield make_pyrepo(cwd, libs=libs, submodules=[])
