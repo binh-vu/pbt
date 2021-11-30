@@ -1,6 +1,6 @@
 from pytest_mock import MockerFixture
 from pbt.package.package import Package, PackageType
-from pbt.package.pipeline import BTPipeline
+from pbt.package.pipeline import BTPipeline, VersionConsistent
 from pbt.package.manager.poetry import Poetry
 from pbt.package.registry.registry import PkgRegistry
 from tests.conftest import PipFreezePkgInfo, Repo, get_dependencies, setup_dir
@@ -131,7 +131,7 @@ def test_enforce_version_consistency(repo1: Repo):
     # strict mode will force updating lib0 even when it's only patched
     repo1.poetry.next_version(lib0, "patch")
     pl.discover()
-    pl.enforce_version_consistency()
+    pl.enforce_version_consistency(VersionConsistent.STRICT)
     repo1.reload_pkgs()
     assert [
         lib0.version,
