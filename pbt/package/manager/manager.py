@@ -8,7 +8,7 @@ from email.generator import Generator
 from functools import lru_cache
 from operator import attrgetter, itemgetter
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
 import semver
 from pbt.config import PBTConfig
@@ -142,6 +142,12 @@ class PkgManager(ABC):
 
         Args:
             pkg: The package to compute the hash for
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_fixed_version_pkgs(self) -> Set[str]:
+        """Get set of packages which versions are fixed and never should updated.
         """
         raise NotImplementedError()
 

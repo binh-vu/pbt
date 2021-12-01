@@ -69,6 +69,10 @@ class BTPipeline:
             is_modified = False
             for deps in [pkg.dependencies, pkg.dev_dependencies]:
                 for dep, specs in deps.items():
+                    if dep in manager.get_fixed_version_pkgs():
+                        # skip fixed version packages
+                        continue
+                    
                     if dep in self.pkgs:
                         # update your own packages
                         dep_version = manager.parse_version(self.pkgs[dep].version)

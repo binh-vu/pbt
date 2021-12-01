@@ -22,6 +22,7 @@ class Poetry(PkgManager):
     def __init__(self, cfg: PBTConfig) -> None:
         super().__init__()
         self.cfg = cfg
+        self.fixed_version_pkgs = {"python"}
 
     def is_package_directory(self, dir: Path) -> bool:
         return (dir / "pyproject.toml").exists()
@@ -324,6 +325,9 @@ class Poetry(PkgManager):
                 memberfile = g.extractfile(member)
                 assert memberfile is not None
                 f.write(memberfile.read())
+    
+    def get_fixed_version_pkgs(self):
+        return self.fixed_version_pkgs
 
     def compute_pkg_hash(self, pkg: Package) -> str:
         """Compute hash of the content of the package"""
