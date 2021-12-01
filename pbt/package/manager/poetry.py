@@ -74,6 +74,11 @@ class Poetry(PkgManager):
             with open(pkg.location / "pyproject.toml", "w") as f:
                 f.write(dumps(cast(Any, doc)))
             yield None
+        except:
+            # write down the failed project so that we can debug it
+            with open(self.cfg.pkg_cache_dir(pkg) / "pyproject.failed.toml", "w") as f:
+                f.write(dumps(cast(Any, doc)))
+            raise
         finally:
             os.rename(
                 self.cfg.pkg_cache_dir(pkg) / "pyproject.toml",

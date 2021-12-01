@@ -10,7 +10,7 @@ from pbt.package.pipeline import BTPipeline, VersionConsistent
 from pbt.package.registry.pypi import PyPI
 
 
-def preprocessing(
+def init(
     cwd: str, packages: List[str], verbose: bool
 ) -> Tuple[BTPipeline, PBTConfig, List[str]]:
     cfg = PBTConfig.from_dir(cwd)
@@ -54,7 +54,7 @@ def preprocessing(
     is_flag=True,
     help="Whether to install the package and its local dependencies in editable mode",
 )
-@click.option("--cwd", default="", help="Override current working directory")
+@click.option("--cwd", default=".", help="Override current working directory")
 @click.option(
     "-v",
     "--verbose",
@@ -65,12 +65,11 @@ def install(
     package: List[str],
     dev: bool = False,
     editable: bool = False,
-    cwd: str = "",
+    cwd: str = ".",
     verbose: bool = False,
 ):
     """Make package"""
-    pl, cfg, pkgs = preprocessing(cwd, package, verbose)
-
+    pl, cfg, pkgs = init(cwd, package, verbose)
     pl.enforce_version_consistency()
     pl.install(sorted(pkgs), include_dev=dev, editable=editable)
 
@@ -82,17 +81,16 @@ def install(
     multiple=True,
     help="Specify the package that we want to build. If empty, build all packages",
 )
-@click.option("--cwd", default="", help="Override current working directory")
+@click.option("--cwd", default=".", help="Override current working directory")
 @click.option(
     "-v",
     "--verbose",
     is_flag=True,
     help="increase verbosity",
 )
-def clean(package: List[str], cwd: str = "", verbose: bool = False):
+def clean(package: List[str], cwd: str = ".", verbose: bool = False):
     """Clean packages' build & lock files"""
-    pl, cfg, pkgs = preprocessing(cwd, package, verbose)
-
+    pl, cfg, pkgs = init(cwd, package, verbose)
     pl.enforce_version_consistency()
     for pkg_name in pkgs:
         pkg = pl.pkgs[pkg_name]
@@ -100,15 +98,15 @@ def clean(package: List[str], cwd: str = "", verbose: bool = False):
 
 
 @click.command()
-@click.option("--cwd", default="", help="Override current working directory")
+@click.option("--cwd", default=".", help="Override current working directory")
 @click.option(
     "-v",
     "--verbose",
     is_flag=True,
     help="increase verbosity",
 )
-def update(cwd: str = "", verbose: bool = False):
-    pl, cfg, pkgs = preprocessing(cwd, [], verbose)
+def update(cwd: str = ".", verbose: bool = False):
+    pl, cfg, pkgs = init(cwd, [], verbose)
     pl.enforce_version_consistency(VersionConsistent.STRICT)
 
 
@@ -119,15 +117,15 @@ def update(cwd: str = "", verbose: bool = False):
     multiple=True,
     help="Specify the package that we want to build. If empty, build all packages",
 )
-@click.option("--cwd", default="", help="Override current working directory")
+@click.option("--cwd", default=".", help="Override current working directory")
 @click.option(
     "-v",
     "--verbose",
     is_flag=True,
     help="increase verbosity",
 )
-def publish(package: List[str], cwd: str = "", verbose: bool = False):
-    pl, cfg, pkgs = preprocessing(cwd, package, verbose)
+def publish(package: List[str], cwd: str = ".", verbose: bool = False):
+    pl, cfg, pkgs = init(cwd, package, verbose)
     pl.enforce_version_consistency()
     pl.publish(
         pkgs,

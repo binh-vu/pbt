@@ -79,7 +79,7 @@ class PkgGraph:
         """
         nodes = nx.dfs_preorder_nodes(self.g, pkg_name)
         if include_dev:
-            return [self.g[uid]["pkg"] for uid in nodes]
+            return [self.g.nodes[uid]["pkg"] for uid in nodes]
 
         lst = []
         for vid in nodes:

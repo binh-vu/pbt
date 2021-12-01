@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pab"
-version = "2.0.2"
+version = "2.0.4"
 description = "A build tool for multi-projects that leverages package registries (pypi, npmjs, etc.)"
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"
@@ -16,20 +16,20 @@ pab = 'pbt.cli:cli'
 pbt = 'pbt.cli:cli'
 
 [tool.poetry.dependencies]
-python = "^3.7"
-orjson = "^3.6.3"
-toml = "^0.10.2"
+python = "^3.8"
+orjson = "^3.6.4"
 semver = "^2.13.0"
-pytest-mock = "^3.6.1"
 loguru = "^0.5.3"
 poetry = "^1.1.8"
 click = "^8.0.3"
-typing-extensions = "^4.0.0"
 networkx = "^2.6.3"
 lbry-rocksdb-optimized = "^0.8.1"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^21.11b1", allow-prereleases = true}
+pytest-mock = "^3.6.1"
+pytest = "^6.2.5"
+pytest-cov = "^3.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

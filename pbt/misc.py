@@ -9,7 +9,7 @@ class ExecProcessError(Exception):
 
 def stdout(line):
     """Print line to stdout"""
-    print(line, end="")
+    print(line)
 
 
 def exec(
@@ -44,6 +44,7 @@ def exec(
         assert p.stdout is not None
         line = p.stdout.readline().decode("utf-8")
         if line != "":
+            assert line[-1] == "\n"
             line = line[:-1]
             output.append(line)
             handler(line)
@@ -52,8 +53,9 @@ def exec(
 
     returncode = p.returncode
     if check_returncode and returncode != 0:
-        msg = f"Command: f{cmd} returns non-zero exit status {returncode}\n" + "".join(
-            output
+        msg = (
+            f"Command: f{cmd} returns non-zero exit status {returncode}\n"
+            + "\n".join(output)
         )
         raise ExecProcessError(msg)
 

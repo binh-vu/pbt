@@ -1,4 +1,5 @@
 import glob
+from marshal import version
 import os
 import re
 from abc import ABC, abstractmethod
@@ -12,7 +13,7 @@ from typing import Dict, List, Literal, Optional, Tuple, Union
 import semver
 from pbt.config import PBTConfig
 from pbt.misc import cache_func
-from pbt.package.package import DepConstraint, DepConstraints, Package
+from pbt.package.package import DepConstraint, DepConstraints, Package, VersionSpec
 
 
 class PkgManager(ABC):
@@ -178,24 +179,42 @@ class PkgManager(ABC):
     def find_latest_specs(self, lst_specs: List[DepConstraints]) -> DepConstraints:
         """Given a set of specs, some of them may be the same, some of them are older.
 
-        This function finds the latest version for each constraint
+        This function finds the latest version for each constraint based on the lowerbound
         """
-        constraints = {}
+        constraints: Dict[Optional[str], Tuple[VersionSpec, DepConstraint]] = {}
         for specs in lst_specs:
             for spec in specs:
-                lb, ub = self.parse_version_spec(spec.version_spec)
+                version_spec = self.parse_version_spec(spec.version_spec)
                 if spec.constraint not in constraints:
-                    constraints[spec.constraint] = (lb, ub, spec)
+                    constraints[spec.constraint] = (version_spec, spec)
                 else:
-                    prev_lb, prev_ub, prev_spec = constraints[spec.constraint]
-                    if lb > prev_lb:
-                        constraints[spec.constraint] = (lb, ub, spec)
-                    elif lb == prev_lb and ub != prev_ub:
+                    prev_version_spec, prev_spec = constraints[spec.constraint]
+                    if version_spec == prev_version_spec:
+                        continue
+
+                    has_recent_version = False
+
+                    # determine if the current spec is newer than the previous one
+                    if (
+                        version_spec.lowerbound is None
+                        or prev_version_spec.lowerbound is None
+                    ):
                         raise ValueError(
                             f"Uncompatible constraint {spec.version_spec} vs {prev_spec}. Consider fixing it"
                         )
 
-        return [v[2] for k, v in sorted(constraints.items(), key=itemgetter(0))]
+                    if version_spec.lowerbound > prev_version_spec.lowerbound:
+                        has_recent_version = True
+                    elif version_spec.upperbound is not None and (
+                        prev_version_spec.upperbound is None
+                        or version_spec.upperbound < prev_version_spec.upperbound
+                    ):
+                        has_recent_version = True
+
+                    if has_recent_version:
+                        constraints[spec.constraint] = (version_spec, spec)
+
+        return [v[1] for k, v in sorted(constraints.items(), key=itemgetter(0))]
 
     def is_version_compatible(
         self, version: semver.VersionInfo, version_spec: str
@@ -206,33 +225,38 @@ class PkgManager(ABC):
             version: package version
             version_spec: The version spec to check against
         """
-        lowerbound, upperbound = self.parse_version_spec(version_spec)
-        if upperbound is not None and version >= upperbound:
-            return False
-        return version >= lowerbound
+        return self.parse_version_spec(version_spec).is_version_compatible(version)
 
+    @classmethod
     @cache_func()
     def parse_version_spec(
-        self, rule: str
-    ) -> Tuple[semver.VersionInfo, Optional[semver.VersionInfo]]:
+        cls,
+        rule: str,
+    ) -> VersionSpec:
         """Parse the given version rule to get lowerbound and upperbound (exclusive)
 
         Example:
-            - "^1.0.0" -> ">= 1.0.0 < 2.0.0"
-            - ">= 1.0.0" -> ">= 1.0.0"
+            - "^1.0.0" -> (1.0.0, 2.0.0)
+            - ">= 1.0.0" -> (1.0.0, None)
+            - ">= 1.0.0, < 2.1.3" -> (1.0.0, 2.1.3)
         """
         m = re.match(
-            r"(?P<op>[\^\~]?)(?P<major>\d+)\.((?P<minor>\d+)\.(?P<patch>\d+)?)?",
+            r"(?P<op1>\^|~|>|>=|==|<|<=)? *(?P<version1>[^ ,\^\~>=<]+)(?:(?:(?: *, *)|(?: +))(?P<op2>\^|~|>|>=|==|<|<=) *(?P<version2>[^ ,\^\~>=<]+))?",
             rule,
         )
-        assert m is not None, "The constraint is too complicated to handle for now"
+        assert (
+            m is not None
+        ), f"The constraint is too complicated to handle for now: `{rule}`"
 
-        lowerbound = semver.VersionInfo(
-            major=int(m.group("major")),
-            minor=int(m.group("minor") or "0"),
-            patch=int(m.group("patch") or "0"),
-        )
-        if m.group("op") == "^":
+        op1, version1 = m.group("op1"), m.group("version1")
+        op2, version2 = m.group("op2"), m.group("version2")
+
+        if op1 == "":
+            op1 = "=="
+
+        lowerbound = cls.parse_version(version1)
+        if op1 == "^":
+            assert version2 is None
             # special case for 0 following the nodejs way (I can't believe why)
             # see more: https://nodesource.com/blog/semver-tilde-and-caret/
             if lowerbound.major == 0:
@@ -242,17 +266,46 @@ class PkgManager(ABC):
                     upperbound = lowerbound.bump_minor()
             else:
                 upperbound = lowerbound.bump_major()
-        elif m.group("op") == "~":
-            if m.group("patch") is not None:
-                upperbound = lowerbound.bump_minor()
-            elif m.group("minor") is not None:
-                upperbound = lowerbound.bump_minor()
-            else:
+            spec = VersionSpec(
+                lowerbound=lowerbound,
+                upperbound=upperbound,
+                is_lowerbound_inclusive=True,
+                is_upperbound_inclusive=False,
+            )
+        elif op1 == "~":
+            assert version2 is None
+            if m.group("version1").isdigit():
+                # only contains major version
                 upperbound = lowerbound.bump_major()
+            else:
+                upperbound = lowerbound.bump_minor()
+            spec = VersionSpec(
+                lowerbound=lowerbound,
+                upperbound=upperbound,
+                is_lowerbound_inclusive=True,
+                is_upperbound_inclusive=False,
+            )
+        elif op1 == "==":
+            assert version2 is None
+            upperbound = lowerbound
+            spec = VersionSpec(
+                lowerbound=lowerbound,
+                upperbound=upperbound,
+                is_lowerbound_inclusive=True,
+                is_upperbound_inclusive=True,
+            )
         else:
-            upperbound = lowerbound.bump_patch()
-
-        return lowerbound, upperbound
+            upperbound = cls.parse_version(version2) if version2 is not None else None
+            if op1 == "<" or op1 == "<=":
+                op1, op2 = op2, op1
+                lowerbound, upperbound = upperbound, lowerbound
+            spec = VersionSpec(
+                lowerbound=lowerbound,
+                upperbound=upperbound,
+                is_lowerbound_inclusive=op1 == ">=",
+                is_upperbound_inclusive=op2 == "<=",
+            )
+        return spec
 
     def update_version_spec(
         self, version_spec: str, version: Union[str, semver.VersionInfo]
@@ -263,7 +316,7 @@ class PkgManager(ABC):
             version_spec: The version spec to update
             version: The version to update the version spec with
         """
-        m = re.match(r"([\^~>=!] *)([^ ]+)", version_spec)
+        m = re.match(r"(\^|~|>|>=|==|<|<=) *([^ ]+)", version_spec)
         if m is None:
             raise NotImplementedError(
                 f"Not implementing update complicated version spec `{version_spec}` yet"
@@ -272,15 +325,30 @@ class PkgManager(ABC):
         groups = m.groups()
         return f"{groups[0]}{str(version)}"
 
-    @staticmethod
+    @classmethod
     @cache_func()
-    def parse_version(version: str) -> semver.VersionInfo:
-        m = re.match(r"^\d+(?P<minor>\.\d+)?$", version)
+    def parse_version(cls, version: str) -> semver.VersionInfo:
+        m = re.match(
+            r"^(?P<major>\d+)(?P<minor>\.\d+)?(?P<patch>\.\d+)?(?P<rest>[^\d\.].*)?$",
+            version,
+        )
+        assert (
+            m is not None
+        ), f"Current parser is not able to parse version: `{version}` yet"
+
         if m is not None:
-            if m.group("minor") is None:
-                version += ".0.0"
-            else:
-                version += ".0"
+            parts = [
+                m.group("major"),
+                m.group("minor") or ".0",
+                m.group("patch") or ".0",
+                m.group("rest") or "",
+            ]
+            if not parts[-1].startswith("-") and parts[-1] != "":
+                # add hyphen to make it compatible with semver package.
+                # e.g. 21.11b1 -> 21.11.0-b1
+                parts[-1] = "-" + parts[-1]
+            version = "".join(parts)
+
         return semver.VersionInfo.parse(version)
 
     def next_version(self, pkg: Package, rule: Literal["major", "minor", "patch"]):

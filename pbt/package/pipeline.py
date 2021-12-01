@@ -84,10 +84,10 @@ class BTPipeline:
                         else:
                             assert mode == VersionConsistent.STRICT
                             for spec in specs:
-                                lowerbound, upperbound = manager.parse_version_spec(
+                                version_spec = manager.parse_version_spec(
                                     spec.version_spec
                                 )
-                                if lowerbound != dep_version:
+                                if version_spec.lowerbound != dep_version:
                                     is_modified = True
                                     spec.version_spec = manager.update_version_spec(
                                         spec.version_spec, dep_version
