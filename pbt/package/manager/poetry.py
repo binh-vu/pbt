@@ -11,7 +11,7 @@ from loguru import logger
 from pytest import skip
 from pbt.config import PBTConfig
 from pbt.diff import Diff, diff_db
-from pbt.misc import cache_func, exec
+from pbt.misc import ExecProcessError, cache_func, exec
 from pbt.package.manager.manager import PkgManager, build_cache
 from pbt.package.package import DepConstraint, DepConstraints, Package, PackageType
 from tomlkit.api import document, dumps, inline_table, loads, nl, table
@@ -233,9 +233,8 @@ class Poetry(PkgManager):
         shutil.rmtree(pkg.location / "dist", ignore_errors=True)
 
     def publish(self, pkg: Package):
+        # exec("poetry publish --build", cwd=pkg.location, **self.exec_options("publish"))
         raise NotImplementedError()
-
-    #     exec("poetry publish --build", cwd=pkg.location, **self.exec_options("publish"))
 
     def install(
         self,
@@ -250,11 +249,27 @@ class Poetry(PkgManager):
         options = "--no-dev" if not include_dev else ""
 
         with self.mask(pkg, skip_deps, additional_deps):
-            exec(
-                f"poetry install {options}",
-                cwd=pkg.location,
-                **self.exec_options("install"),
-            )
+            try:
+                exec(
+                    f"poetry install {options}",
+                    cwd=pkg.location,
+                    **self.exec_options("install"),
+                )
+            except ExecProcessError as e:
+                if str(e).find(
+                    "Warning: The lock file is not up to date with the latest changes in pyproject.toml. You may be getting outdated dependencies. Run update to update them."
+                ):
+                    # try to update the lock file without upgrade previous packages, and retry
+                    exec(
+                        "poetry lock --no-update",
+                        cwd=pkg.location,
+                        **self.exec_options("install"),
+                    )
+                    exec(
+                        f"poetry install {options}",
+                        cwd=pkg.location,
+                        **self.exec_options("install"),
+                    )
 
         if editable:
             self.build_editable(pkg, skip_deps=skip_deps)
@@ -325,7 +340,7 @@ class Poetry(PkgManager):
                 memberfile = g.extractfile(member)
                 assert memberfile is not None
                 f.write(memberfile.read())
-    
+
     def get_fixed_version_pkgs(self):
         return self.fixed_version_pkgs
 
