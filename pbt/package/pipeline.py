@@ -149,7 +149,8 @@ class BTPipeline:
 
                 for dep in deps:
                     if isinstance(dep, Package):
-                        manager.install_dependency(pkg, dep, editable=editable)
+                        skip_dep_deps =list(dep.dependencies.keys()) + list(dep.dev_dependencies.keys())
+                        manager.install_dependency(pkg, dep, editable=editable, skip_dep_deps=skip_dep_deps)
 
     def publish(self, pkg_names: List[str], registries: Dict[PackageType, PkgRegistry]):
         """Publish a package. Check if the package is modified but the version is not changed so
