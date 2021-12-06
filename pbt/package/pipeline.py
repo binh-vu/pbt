@@ -72,7 +72,7 @@ class BTPipeline:
                     if dep in manager.get_fixed_version_pkgs():
                         # skip fixed version packages
                         continue
-                    
+
                     if dep in self.pkgs:
                         # update your own packages
                         dep_version = manager.parse_version(self.pkgs[dep].version)
@@ -149,8 +149,12 @@ class BTPipeline:
 
                 for dep in deps:
                     if isinstance(dep, Package):
-                        skip_dep_deps =list(dep.dependencies.keys()) + list(dep.dev_dependencies.keys())
-                        manager.install_dependency(pkg, dep, editable=editable, skip_dep_deps=skip_dep_deps)
+                        skip_dep_deps = list(dep.dependencies.keys()) + list(
+                            dep.dev_dependencies.keys()
+                        )
+                        manager.install_dependency(
+                            pkg, dep, editable=editable, skip_dep_deps=skip_dep_deps
+                        )
 
     def publish(self, pkg_names: List[str], registries: Dict[PackageType, PkgRegistry]):
         """Publish a package. Check if the package is modified but the version is not changed so
