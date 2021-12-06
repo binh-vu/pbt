@@ -100,6 +100,8 @@ class PkgManager(ABC):
     ):
         """Install the given dependency for the given package.
 
+        The dependency must not be the phantom package as it does not containing any code to build or install.
+
         Note: don't expect this function will be able to find the local dependencies in the project
         as the manager relies on a package registry. For local dependencies, add them to `skip_deps` anddd use `install_dependency` to install them
         separately instead. Otherwise, you may get an error.
@@ -121,7 +123,7 @@ class PkgManager(ABC):
         skip_deps: List[str] = None,
         additional_deps: Dict[str, DepConstraints] = None,
     ):
-        """Install the package, assuming the the specification is updated.
+        """Install the package, assuming the the specification is updated. Note that if the package is phantom, only the dependencies are installed.
 
         Note: don't expect this function will be able to find the local dependencies in the project
         as the manager relies on a package registry. For local dependencies, add them to `skip_deps` anddd use `install_dependency` to install them
@@ -147,8 +149,7 @@ class PkgManager(ABC):
 
     @abstractmethod
     def get_fixed_version_pkgs(self) -> Set[str]:
-        """Get set of packages which versions are fixed and never should updated.
-        """
+        """Get set of packages which versions are fixed and never should updated."""
         raise NotImplementedError()
 
     def filter_included_files(self, pkg: Package, files: List[str]) -> List[str]:

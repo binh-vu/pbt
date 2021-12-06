@@ -18,6 +18,8 @@ class PBTConfig:
     cwd: Path
     cache_dir: Path
     ignore_packages: Set[str]
+    # packages that do not contain any code with sole purpose for installing dependencies or creating working environment
+    phantom_packages: Set[str]
 
     @staticmethod
     def from_dir(cwd: Union[Path, str]) -> "PBTConfig":
@@ -60,10 +62,11 @@ class PBTConfig:
         else:
             cfg = {}
 
-        logger.info("Working directory: {}", cwd)
+        logger.info("Root directory: {}", cwd)
         return PBTConfig(
             cwd=cwd,
             ignore_packages=set(cfg.get("ignore_packages", [])),
+            phantom_packages=set(cfg.get("phantom_packages", [])),
             cache_dir=cache_dir,
         )
 

@@ -101,7 +101,12 @@ def test_save():
         tmpdir = Path(tmpdir)
         (tmpdir / ".cache").mkdir(parents=True, exist_ok=True)
 
-        cfg = PBTConfig(cwd=tmpdir, cache_dir=tmpdir / ".cache", ignore_packages=set())
+        cfg = PBTConfig(
+            cwd=tmpdir,
+            cache_dir=tmpdir / ".cache",
+            ignore_packages=set(),
+            phantom_packages=set(),
+        )
         poetry = Poetry(cfg)
 
         lib = pylib(

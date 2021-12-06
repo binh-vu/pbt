@@ -31,6 +31,12 @@ class BTPipeline:
         """Discover packages in the project."""
         pkgs = {}
         for manager in self.managers.values():
+            if manager.is_package_directory(self.root):
+                pkg = manager.load(self.root)
+                if pkg.name in pkgs:
+                    raise RuntimeError(f"Duplicate package {pkg.name}")
+                pkgs[pkg.name] = pkg
+
             for fpath in glob.glob(manager.glob_query(self.root)):
                 pkg = manager.load(Path(fpath).parent)
                 if pkg.name in pkgs:

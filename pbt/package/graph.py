@@ -77,7 +77,10 @@ class PkgGraph:
             pkg_name: The package to get the dependencies of.
             include_dev: Whether to include dev dependencies.
         """
-        nodes = nx.dfs_preorder_nodes(self.g, pkg_name)
+        nodes = list(nx.dfs_preorder_nodes(self.g, pkg_name))
+        assert nodes[0] == pkg_name, "The first node is the package itself"
+        nodes = nodes[1:]
+
         if include_dev:
             return [self.g.nodes[uid]["pkg"] for uid in nodes]
 

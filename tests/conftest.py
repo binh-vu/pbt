@@ -182,7 +182,7 @@ def make_pyrepo(cwd: Path, libs: List[Package], submodules: List[Package]):
     cache_dir = cwd / ".cache"
     cache_dir.mkdir(parents=True)
 
-    cfg = PBTConfig(cwd, cache_dir, ignore_packages=set())
+    cfg = PBTConfig(cwd, cache_dir, ignore_packages=set(), phantom_packages=set())
 
     # setup project directory
     tree = {}

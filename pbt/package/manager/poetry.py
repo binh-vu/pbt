@@ -271,7 +271,7 @@ class Poetry(PkgManager):
                         **self.exec_options("install"),
                     )
 
-        if editable:
+        if editable and pkg.name not in self.cfg.phantom_packages:
             self.build_editable(pkg, skip_deps=skip_deps)
             exec([self.python_path(pkg), "setup.py", "develop"], cwd=pkg.location)
             (pkg.location / "setup.py").unlink()  # remove the setup.py file
@@ -361,6 +361,7 @@ class Poetry(PkgManager):
         editable: bool = False,
         skip_dep_deps: List[str] = None,
     ):
+        assert dependency.name not in self.cfg.phantom_packages, dependency.name
         skip_dep_deps = skip_dep_deps or []
         exec([self.pip_path(pkg), "uninstall", "-y", dependency.name])
 
