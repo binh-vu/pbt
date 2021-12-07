@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pab"
-version = "2.0.7"
+version = "2.0.8"
 description = "A build tool for multi-projects that leverages package registries (pypi, npmjs, etc.)"
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"
@@ -24,6 +24,7 @@ tomlkit = "^0.7.2"
 click = "^8.0.3"
 networkx = "^2.6.3"
 lbry-rocksdb-optimized = "^0.8.1"
+requests = "^2.26.0"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^21.11b1", allow-prereleases = true}

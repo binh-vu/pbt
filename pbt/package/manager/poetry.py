@@ -5,10 +5,9 @@ import tarfile
 from contextlib import contextmanager
 from operator import attrgetter
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Literal, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Union, cast
 
 from loguru import logger
-from pytest import skip
 from pbt.config import PBTConfig
 from pbt.diff import Diff, diff_db
 from pbt.misc import ExecProcessError, cache_func, exec
