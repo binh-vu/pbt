@@ -9,7 +9,6 @@ from tests.conftest import (
     PipFreezePkgInfo,
     Repo,
     get_dependencies,
-    get_dependency,
     pylib,
 )
 
