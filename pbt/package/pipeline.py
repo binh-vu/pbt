@@ -206,3 +206,16 @@ class BTPipeline:
             for name, pkg in sorted(publishing_pkgs.items(), key=itemgetter(0)):
                 if diffs[name].is_version_diff:
                     self.managers[pkg.type].publish(pkg)
+
+    def build_editable(self, pkg_names: List[str]):
+        """Build packages
+
+        Args:
+            pkg_names: name of packages to build
+        """
+        pkgs = [self.pkgs[name] for name in pkg_names]
+
+        with build_cache():
+            for pkg in pkgs:
+                manager = self.managers[pkg.type]
+                manager.build_editable(pkg)

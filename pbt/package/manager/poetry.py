@@ -316,7 +316,7 @@ class Poetry(PkgManager):
     def build_editable(
         self,
         pkg: Package,
-        skip_deps: List[str],
+        skip_deps: List[str] = None,
     ):
         """Build egg package that can be used to install in editable mode as poetry does not
         provide it out of the box.
@@ -339,6 +339,8 @@ class Poetry(PkgManager):
                 memberfile = g.extractfile(member)
                 assert memberfile is not None
                 f.write(memberfile.read())
+
+            exec([self.python_path(pkg), "setup.py", "bdist_egg"], cwd=pkg.location)
 
     def get_fixed_version_pkgs(self):
         return self.fixed_version_pkgs

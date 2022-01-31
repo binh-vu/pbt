@@ -133,3 +133,22 @@ def publish(package: List[str], cwd: str = ".", verbose: bool = False):
             PackageType.Poetry: PyPI.get_instance(),
         },
     )
+
+
+@click.command()
+@click.option(
+    "-p",
+    "--package",
+    multiple=True,
+    help="Specify the package that we want to build. If empty, build all packages",
+)
+@click.option("--cwd", default=".", help="Override current working directory")
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="increase verbosity",
+)
+def build_editable(package: List[str], cwd: str = ".", verbose: bool = False):
+    pl, cfg, pkgs = init(cwd, package, verbose)
+    pl.build_editable(package)

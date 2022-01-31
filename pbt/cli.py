@@ -3,7 +3,7 @@ import importlib.metadata
 import click
 from loguru import logger
 
-from pbt.console.pbt import install, clean, update, publish
+from pbt.console.pbt import install, clean, update, publish, build_editable
 from pbt.console.git import git
 
 
@@ -17,6 +17,7 @@ cli.add_command(install)
 cli.add_command(clean)
 cli.add_command(publish)
 cli.add_command(update)
+cli.add_command(build_editable)
 cli.add_command(git)
 
 
