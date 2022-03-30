@@ -1,6 +1,8 @@
+import re
 import glob
 import os
 import shutil
+from sys import version
 import tarfile
 from contextlib import contextmanager
 from operator import attrgetter
@@ -232,16 +234,19 @@ class Poetry(PkgManager):
         shutil.rmtree(pkg.location / "dist", ignore_errors=True)
 
     def publish(self, pkg: Package):
-        # exec("poetry publish --build", cwd=pkg.location, **self.exec_options("publish"))
-        raise NotImplementedError()
+        exec(
+            "poetry publish --build --no-interaction",
+            cwd=pkg.location,
+            **self.exec_options("publish"),
+        )
 
     def install(
         self,
         pkg: Package,
         editable: bool = False,
         include_dev: bool = False,
-        skip_deps: List[str] = None,
-        additional_deps: Dict[str, DepConstraints] = None,
+        skip_deps: Optional[List[str]] = None,
+        additional_deps: Optional[Dict[str, DepConstraints]] = None,
     ):
         skip_deps = skip_deps or []
         additional_deps = additional_deps or {}
@@ -278,8 +283,8 @@ class Poetry(PkgManager):
     def build(
         self,
         pkg: Package,
-        skip_deps: List[str] = None,
-        additional_deps: Dict[str, DepConstraints] = None,
+        skip_deps: Optional[List[str]] = None,
+        additional_deps: Optional[Dict[str, DepConstraints]] = None,
     ):
         """Build the package. Support ignoring some dependencies to avoid installing and solving
         dependencies multiple times (not in the super interface as compiled languages will complain).
@@ -316,7 +321,7 @@ class Poetry(PkgManager):
     def build_editable(
         self,
         pkg: Package,
-        skip_deps: List[str] = None,
+        skip_deps: Optional[List[str]] = None,
     ):
         """Build egg package that can be used to install in editable mode as poetry does not
         provide it out of the box.
@@ -360,7 +365,7 @@ class Poetry(PkgManager):
         pkg: Package,
         dependency: Package,
         editable: bool = False,
-        skip_dep_deps: List[str] = None,
+        skip_dep_deps: Optional[List[str]] = None,
     ):
         assert dependency.name not in self.cfg.phantom_packages, dependency.name
         skip_dep_deps = skip_dep_deps or []
@@ -387,6 +392,15 @@ class Poetry(PkgManager):
         output = exec(
             "poetry env list --full-path", cwd=dir, **self.exec_options("env.fetch")
         )
+        output = [
+            line
+            for line in output
+            if not (
+                line.startswith(" ")
+                or line.startswith("\t")
+                or line.find("Warning:") != -1
+            )
+        ]
 
         if len(output) == 0:
             # environment doesn't exist, create it
@@ -401,15 +415,19 @@ class Poetry(PkgManager):
 
         if len(output) > 1:
             logger.warning(
-                "There are multiple virtual environments for package {}, and we pick the first one (maybe incorrect)",
+                "There are multiple virtual environments for package {}, and we pick the first one (maybe incorrect). List of environments: \n{}",
                 name,
+                "\n".join(["\t- " + x for x in output]),
             )
 
+        assert len(output) > 0
         if output[0].endswith(" (Activated)"):
             path = output[0].split(" ")[0]
         else:
             path = output[0]
 
+        if not Path(path).exists():
+            raise Exception(f"Environment path {path} doesn't exist")
         return Path(path)
 
     def tar_path(self, pkg: Package) -> Optional[Path]:
@@ -444,18 +462,29 @@ class Poetry(PkgManager):
             return DepConstraint(version_spec=spec)
         elif isinstance(spec, dict):
             if "version" not in spec:
-                raise NotImplementedError(
-                    f"Not support specify dependency outside of Pypi yet. But found spec {spec}"
-                )
+                if "url" in spec:
+                    # try to figure out the version from the URL if possible, otherwise, use 1.0.0
+                    m = re.search(r"\d+.\d+.\d+", spec["url"])
+                    if m is not None:
+                        version_spec = f"=={m.group()}"
+                    else:
+                        version_spec = "==1.0.0"
+                else:
+                    raise NotImplementedError(
+                        f"Not support specify dependency outside of Pypi yet. But found spec {spec}"
+                    )
+            else:
+                version_spec = spec["version"]
 
             constraint = (
                 f"python={spec.get('python', '*')} markers={spec.get('markers', '')}"
             )
             origin_spec = spec.copy()
-            origin_spec.pop("version")
+            if "version" in origin_spec:
+                origin_spec.pop("version")
 
             return DepConstraint(
-                version_spec=spec["version"],
+                version_spec=version_spec,
                 constraint=constraint,
                 version_spec_field="version",
                 origin_spec=origin_spec,

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pab"
-version = "2.1.0"
+version = "2.2.0"
 description = "A build tool for multi-projects that leverages package registries (pypi, npmjs, etc.)"
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"

@@ -1,3 +1,4 @@
+from io import DEFAULT_BUFFER_SIZE
 from typing import List, Tuple
 
 import click
@@ -33,6 +34,34 @@ def init(
         )
 
     return pl, cfg, sorted(pkgs)
+
+
+@click.command()
+@click.option(
+    "-d",
+    "--dev",
+    is_flag=True,
+    help="Whether to print to the local (inter-) dependencies",
+)
+@click.option("--cwd", default=".", help="Override current working directory")
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="increase verbosity",
+)
+def list(dev: bool = False, cwd: str = ".", verbose: bool = False):
+    """List all packages in the current project, and their dependencies if required."""
+    pl, cfg, pkgs = init(cwd, [], verbose)
+    for pkg in pl.pkgs.values():
+        print_children = (
+            dev and any(True for dep in pkg.dependencies.keys() if dep in pl.pkgs) > 0
+        )
+        print(f"{pkg.name} ({pkg.version})" + (":" if print_children else ""))
+        if dev:
+            for dep in pkg.dependencies.keys():
+                if dep in pkgs:
+                    print(f"\t- {dep} ({pl.pkgs[dep].version})")
 
 
 @click.command()
@@ -106,6 +135,7 @@ def clean(package: List[str], cwd: str = ".", verbose: bool = False):
     help="increase verbosity",
 )
 def update(cwd: str = ".", verbose: bool = False):
+    """Update all package inter-dependencies"""
     pl, cfg, pkgs = init(cwd, [], verbose)
     pl.enforce_version_consistency(VersionConsistent.STRICT)
 
@@ -125,6 +155,7 @@ def update(cwd: str = ".", verbose: bool = False):
     help="increase verbosity",
 )
 def publish(package: List[str], cwd: str = ".", verbose: bool = False):
+    """Publish packages"""
     pl, cfg, pkgs = init(cwd, package, verbose)
     pl.enforce_version_consistency()
     pl.publish(
@@ -150,5 +181,6 @@ def publish(package: List[str], cwd: str = ".", verbose: bool = False):
     help="increase verbosity",
 )
 def build_editable(package: List[str], cwd: str = ".", verbose: bool = False):
+    """Build packages in editable mode"""
     pl, cfg, pkgs = init(cwd, package, verbose)
     pl.build_editable(package)

@@ -89,7 +89,7 @@ class PkgManager(ABC):
             package: The package to build
         """
         raise NotImplementedError()
-    
+
     @abstractmethod
     def build_editable(
         self,
@@ -108,7 +108,7 @@ class PkgManager(ABC):
         package: Package,
         dependency: Package,
         editable: bool = False,
-        skip_dep_deps: List[str] = None,
+        skip_dep_deps: Optional[List[str]] = None,
     ):
         """Install the given dependency for the given package.
 
@@ -132,8 +132,8 @@ class PkgManager(ABC):
         package: Package,
         editable: bool = False,
         include_dev: bool = False,
-        skip_deps: List[str] = None,
-        additional_deps: Dict[str, DepConstraints] = None,
+        skip_deps: Optional[List[str]] = None,
+        additional_deps: Optional[Dict[str, DepConstraints]] = None,
     ):
         """Install the package, assuming the the specification is updated. Note that if the package is phantom, only the dependencies are installed.
 
@@ -195,10 +195,21 @@ class PkgManager(ABC):
                 output.append(file)
         return output
 
-    def find_latest_specs(self, lst_specs: List[DepConstraints]) -> DepConstraints:
+    def find_latest_specs(
+        self,
+        lst_specs: List[DepConstraints],
+        mode: Optional[Literal["strict", "compatible"]] = None,
+    ) -> DepConstraints:
         """Given a set of specs, some of them may be the same, some of them are older.
 
         This function finds the latest version for each constraint based on the lowerbound
+
+        Args:
+            lst_specs: list of list of specs
+            mode: 'strict' or 'compatible' or None.
+                'strict' means all versions must be the same.
+                'compatible' means all versions must be compatible.
+                None means we don't check
         """
         constraints: Dict[Optional[str], Tuple[VersionSpec, DepConstraint]] = {}
         for specs in lst_specs:
@@ -221,6 +232,16 @@ class PkgManager(ABC):
                         raise ValueError(
                             f"Uncompatible constraint {spec.version_spec} vs {prev_spec}. Consider fixing it"
                         )
+
+                    if mode == "strict":
+                        raise ValueError()
+                    elif mode == "compatible":
+                        # they are incompatible if either the same or one is stricter
+                        try:
+                            version_spec.intersect(prev_version_spec)
+                        except ValueError:
+                            # they are incompatible
+                            raise
 
                     if version_spec.lowerbound > prev_version_spec.lowerbound:
                         has_recent_version = True

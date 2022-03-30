@@ -30,7 +30,7 @@ class PackageType(str, Enum):
     Poetry = "poetry"
 
 
-@dataclass
+@dataclass(eq=True)
 class DepConstraint:
     """Constraint of a dependency.
 

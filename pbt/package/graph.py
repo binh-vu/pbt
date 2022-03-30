@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import chain
 import networkx as nx
-from typing import Dict, Iterable, List, Type, Union
+from typing import Dict, Iterable, List, Optional, Type, Union
 
 from pbt.package.package import Package, DepConstraints, PackageType
 
@@ -21,7 +21,7 @@ class PkgGraph:
     The edge between (A, B) represents a dependency relationship that package A uses package B.
     """
 
-    def __init__(self, g: nx.DiGraph = None) -> None:
+    def __init__(self, g: Optional[nx.DiGraph] = None) -> None:
         self.g = g or nx.DiGraph()
         self.pkgs = {}
 

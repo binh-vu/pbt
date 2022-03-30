@@ -3,13 +3,19 @@ import glob
 from itertools import chain
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
 from pbt.diff import RemoteDiff
 from pbt.package.graph import PkgGraph, ThirdPartyPackage
 from pbt.package.manager.manager import PkgManager, build_cache
-from pbt.package.package import Package, PackageType
+from pbt.package.package import (
+    Package,
+    PackageType,
+    DepConstraint,
+    DepConstraints,
+    VersionSpec,
+)
 from pbt.package.registry.registry import PkgRegistry
 
 
@@ -18,6 +24,8 @@ class VersionConsistent(enum.Enum):
     STRICT = "strict"
     # it is consistent if it matches the constraint
     COMPATIBLE = "compatible"
+    # no consistent check is performed, and the latest version is preferred
+    NO_CHECK = "no_check"
 
 
 class BTPipeline:
@@ -31,13 +39,7 @@ class BTPipeline:
         """Discover packages in the project."""
         pkgs = {}
         for manager in self.managers.values():
-            if manager.is_package_directory(self.root):
-                pkg = manager.load(self.root)
-                if pkg.name in pkgs:
-                    raise RuntimeError(f"Duplicate package {pkg.name}")
-                pkgs[pkg.name] = pkg
-
-            for fpath in glob.glob(manager.glob_query(self.root)):
+            for fpath in glob.glob(manager.glob_query(self.root), recursive=True):
                 pkg = manager.load(Path(fpath).parent)
                 if pkg.name in pkgs:
                     raise RuntimeError(f"Duplicate package {pkg.name}")
@@ -46,12 +48,15 @@ class BTPipeline:
         self.pkgs = pkgs
 
     def enforce_version_consistency(
-        self, mode: VersionConsistent = VersionConsistent.COMPATIBLE
+        self,
+        mode: VersionConsistent = VersionConsistent.COMPATIBLE,
+        thirdparty_mode: VersionConsistent = VersionConsistent.COMPATIBLE,
     ):
         """Update version of packages & third-party packages in the project.
 
         Args:
             mode: how to enforce version consistency for your OWN packages in the project.
+            thirdparty_mode: how to enforce version consistency for third-party packages in the project.
         """
         # resolve the latest version specs of (third-party) packages
         thirdparty_pkgs = {}
@@ -59,13 +64,28 @@ class BTPipeline:
         for pkg in self.graph.iter_pkg():
             if isinstance(pkg, ThirdPartyPackage):
                 manager = self.managers[pkg.type]
-                latest_specs = manager.find_latest_specs(
-                    list(pkg.invert_dependencies.values())
-                )
-                thirdparty_pkgs[pkg.name] = latest_specs
+
+                try:
+                    pkg_spec = manager.find_latest_specs(
+                        list(pkg.invert_dependencies.values()),
+                        mode="strict"
+                        if thirdparty_mode == VersionConsistent.STRICT
+                        else (
+                            "compatible"
+                            if thirdparty_mode == VersionConsistent.COMPATIBLE
+                            else None
+                        ),
+                    )
+                except ValueError as e:
+                    raise ValueError(
+                        f"Package {pkg.name} has different versions used in those packages: {list(pkg.invert_dependencies.keys())}. Consider fixing it"
+                    ) from e
+
+                thirdparty_pkgs[pkg.name] = pkg_spec
+
                 # update graph
                 for key in pkg.invert_dependencies:
-                    pkg.invert_dependencies[key] = latest_specs
+                    pkg.invert_dependencies[key] = pkg_spec
 
         # iterate over packages and update their dependencies.
         # however, for your own packages, always use the latest version or make sure it
