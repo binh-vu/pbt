@@ -24,7 +24,7 @@ tomlkit = "^0.7.2"
 click = "^8.0.3"
 networkx = "^2.6.3"
 lbry-rocksdb-optimized = "^0.8.1"
-requests = "^2.26.0"
+requests = "^2.27.1"
 
 [tool.poetry.dev-dependencies]
 pytest-mock = "^3.6.1"

@@ -1,6 +1,6 @@
 from pathlib import Path
 import subprocess
-from typing import Callable, List, Union
+from typing import Callable, List, Union, Optional
 
 
 class ExecProcessError(Exception):
@@ -14,7 +14,7 @@ def stdout(line):
 
 def exec(
     cmd: Union[str, List[Union[str, Path]]],
-    handler: Callable[[str], None] = None,
+    handler: Optional[Callable[[str], None]] = None,
     check_returncode: bool = True,
     cwd: Union[Path, str] = "./",
 ) -> List[str]:
