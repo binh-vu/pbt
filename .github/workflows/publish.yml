@@ -22,6 +22,6 @@ jobs:
 #       - name: Run Test
 #         run: poetry run pytest -x
       - name: Publish
-        run: poetry publish --username=__token__ --password=$PWD
+        run: poetry publish --build --username=__token__ --password=$PWD
         env:
           PWD: ${{ secrets.PYPI_TOKEN }}
