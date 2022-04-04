@@ -169,11 +169,47 @@ def pylib(cwd, name, version, deps=None, dev_deps=None):
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def mockup_pypi():
     pypi = PyPI.get_instance()
     default_index = pypi.index
-    PyPI.instances[default_index] = PyPIMockUp(default_index)
+
+    if "mockup" not in PyPI.instances:
+        mockpypi = PyPIMockUp(default_index)
+        PyPI.instances["mockup"] = mockpypi
+
+        # re-calculate packages' hash as different environments create different hash...
+        with TemporaryDirectory(dir="/tmp") as tmpdir:
+            cwd = tmpdir2path(tmpdir)
+            setup_dir(
+                {
+                    "scripts": {"helloworld.py": "print('hello world')"},
+                    "pbtconfig.json": "{}",
+                },
+                cwd,
+            )
+            get_lib = partial(pylib, cwd)
+            lib0 = get_lib("lib0", "0.5.1")
+            lib1 = get_lib("lib1", "0.2.1", {lib0.name: "^" + lib0.version})
+            lib2 = get_lib("lib2", "0.6.7", {lib1.name: "~" + lib1.version})
+            lib3 = get_lib(
+                "lib3",
+                "0.1.4",
+                {lib0.name: "~" + lib0.version, lib1.name: "~" + lib1.version},
+            )
+
+            repo = make_pyrepo(
+                cwd,
+                libs=[lib0, lib1, lib2, lib3],
+                submodules=[lib0, lib1, lib2],
+            )
+
+            for pkg in repo.packages.values():
+                mockpypi.update_pkg_hash(
+                    pkg.name, pkg.version, repo.poetry.compute_pkg_hash(pkg)
+                )
+
+    PyPI.instances[default_index] = PyPI.instances["mockup"]
     yield PyPI.instances[default_index]
     PyPI.instances[default_index] = pypi
 
@@ -195,7 +231,6 @@ def make_pyrepo(cwd: Path, libs: List[Package], submodules: List[Package]):
         }
     setup_dir(tree, cwd)
 
-    # clean previous environments if have
     poetry = Poetry(cfg)
     for lib in libs:
         poetry.save(lib)
@@ -259,7 +294,9 @@ def repo1(mockup_pypi):
         )
 
         yield make_pyrepo(
-            cwd, libs=[lib0, lib1, lib2, lib3], submodules=[lib0, lib1, lib2]
+            cwd,
+            libs=[lib0, lib1, lib2, lib3],
+            submodules=[lib0, lib1, lib2],
         )
 
 
