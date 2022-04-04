@@ -17,5 +17,7 @@ jobs:
         run: pip install poetry
       - name: Install Dependencies
         run: poetry install
+      - name: Setup Test Prerequisite
+        run: git config --global user.email "you@example.com" && git config --global user.name "Your Name"
       - name: Run Test
         run: poetry run pytest
