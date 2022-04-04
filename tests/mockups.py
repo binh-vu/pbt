@@ -12,9 +12,7 @@ class PyPIMockUp(PyPI):
                 "releases": {
                     "0.5.1": [
                         {
-                            "digests": {
-                                "sha256": "1f10879eff34826eef6f06af274d288016d664c9780ac81a2b39ec3e1575bae2"
-                            },
+                            "digests": {"sha256": ""},
                             "filename": "lib0-0.5.1-py3-none-any.whl",
                         }
                     ]
@@ -24,9 +22,7 @@ class PyPIMockUp(PyPI):
                 "releases": {
                     "0.2.1": [
                         {
-                            "digests": {
-                                "sha256": "34d4e3e9a79ee752f5e6e6c79327b0d18d2ae5685600c8ef0e5ea90564492071"
-                            },
+                            "digests": {"sha256": ""},
                             "filename": "lib1-0.2.1-py3-none-any.whl",
                         }
                     ]
@@ -36,9 +32,7 @@ class PyPIMockUp(PyPI):
                 "releases": {
                     "0.6.7": [
                         {
-                            "digests": {
-                                "sha256": "12dd7633b4879a4743d4175fa4e6fa5934279368effa75b3b6083a6269e3d4f4"
-                            },
+                            "digests": {"sha256": ""},
                             "filename": "lib2-0.6.7-py3-none-any.whl",
                         }
                     ]
@@ -48,9 +42,7 @@ class PyPIMockUp(PyPI):
                 "releases": {
                     "0.1.4": [
                         {
-                            "digests": {
-                                "sha256": "f622e1172490a684366cd5fca8be5ed2cafc104442032aed35ef8ec9a081d5fa"
-                            },
+                            "digests": {"sha256": ""},
                             "filename": "lib3-0.1.4-py3-none-any.whl",
                         }
                     ]

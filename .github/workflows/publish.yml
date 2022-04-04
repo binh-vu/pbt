@@ -9,13 +9,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v3.1.0
+      - name: Setup Python
+        uses: actions/setup-python@v3.1.0
+        with:
+          python-version: 3.8
       - name: Install Poetry
         run: pip install poetry
-      - name: test
-        run: pip install lbry-rocksdb-optimized
       - name: Install Dependencies
         run: poetry install
-      - name: Run Test
-        run: pytest
-      
+      - name: Setup Git
+        run: git config --global user.email "you@example.com" && git config --global user.name "Your Name" && git config --global init.defaultBranch master
+#       - name: Run Test
+#         run: poetry run pytest -x
+      - name: Publish
+        run: poetry publish --build --username $PYPI_USER --password $PYPI_PWD
+        env:
+          PYPI_USER: __token__
+          PYPI_PWD: ${{ secrets.PYPI_TOKEN }}
