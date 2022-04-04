@@ -12,10 +12,11 @@ jobs:
       - uses: actions/setup-python@v3.1.0
       - name: Install Poetry
         run: pip install poetry
+      - name: test2
+        run: pip debug --verbose
       - name: test
         run: pip install lbry-rocksdb-optimized
       - name: Install Dependencies
         run: poetry install
       - name: Run Test
         run: pytest
-      
