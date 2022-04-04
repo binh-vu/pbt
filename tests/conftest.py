@@ -213,6 +213,15 @@ def make_pyrepo(cwd: Path, libs: List[Package], submodules: List[Package]):
     )
 
 
+def tmpdir2path(tmpdir: str) -> Path:
+    """Convert directory returned from TemporaryDirectory to Path.
+    For MacOS, it is a subdirectory of /private/, and git returns that directory so we need to add /private/ to it.
+    """
+    if sys.platform == "darwin" and tmpdir.startswith("/tmp"):
+        return Path("/private/" + tmpdir)
+    return Path(tmpdir)
+
+
 @pytest.fixture
 def repo1(mockup_pypi):
     """
@@ -225,9 +234,8 @@ def repo1(mockup_pypi):
     only lib 0 & lib 1 & lib 2 are git submodules
 
     """
-    with TemporaryDirectory() as tmpdir:
-        cwd = Path(tmpdir)
-        # cwd = Path("/tmp/pbt/project1")
+    with TemporaryDirectory(dir="/tmp") as tmpdir:
+        cwd = tmpdir2path(tmpdir)
 
         setup_dir(
             {
@@ -266,9 +274,8 @@ def repo2(mockup_pypi):
     no libraries are submodules
 
     """
-    with TemporaryDirectory() as tmpdir:
-        cwd = Path(tmpdir)
-        # cwd = Path("/tmp/pbt/project2")
+    with TemporaryDirectory(dir="/tmp") as tmpdir:
+        cwd = tmpdir2path(tmpdir)
 
         setup_dir(
             {
