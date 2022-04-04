@@ -4,7 +4,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Union, NamedTuple
-
+from pbt.misc import exec
 
 class GitFileStatus(NamedTuple):
     is_deleted: bool
@@ -41,11 +41,9 @@ PathOrStr = Union[str, Path]
 class Git:
     @classmethod
     def get_new_modified_deleted_files(cls, cwd: PathOrStr):
-        git_dir = (
-            subprocess.check_output(["git", "rev-parse", "--show-toplevel"], cwd=cwd)
-            .decode()
-            .strip()
-        )
+        git_dir, = exec("git rev-parse --show-toplevel", cwd=cwd)
+        assert Path(git_dir).exists()
+
         output = subprocess.check_output(
             ["git", "status", "-uall", "--porcelain=v1", "--no-renames", "."], cwd=cwd
         ).decode()
