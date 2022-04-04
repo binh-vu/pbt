@@ -15,11 +15,7 @@ jobs:
           python-version: 3.8
       - name: Install Poetry
         run: pip install poetry
-      - name: test2
-        run: pip debug --verbose
-      - name: test
-        run: pip install lbry-rocksdb-optimized
       - name: Install Dependencies
         run: poetry install
       - name: Run Test
-        run: pytest
+        run: poetry run pytest
