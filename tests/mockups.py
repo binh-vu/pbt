@@ -13,7 +13,7 @@ class PyPIMockUp(PyPI):
                     "0.5.1": [
                         {
                             "digests": {
-                                "sha256": "9b28e6634400d7ff30c60dc93f2dfe8d036a03ee93fc87ae1c37cda57d085280"
+                                "sha256": "1f10879eff34826eef6f06af274d288016d664c9780ac81a2b39ec3e1575bae2"
                             },
                             "filename": "lib0-0.5.1-py3-none-any.whl",
                         }
@@ -25,7 +25,7 @@ class PyPIMockUp(PyPI):
                     "0.2.1": [
                         {
                             "digests": {
-                                "sha256": "57f98d7742de61e37c2b82d33edf03b99b20088df2a8de6ce4c4bae2a21fe097"
+                                "sha256": "34d4e3e9a79ee752f5e6e6c79327b0d18d2ae5685600c8ef0e5ea90564492071"
                             },
                             "filename": "lib1-0.2.1-py3-none-any.whl",
                         }
@@ -37,7 +37,7 @@ class PyPIMockUp(PyPI):
                     "0.6.7": [
                         {
                             "digests": {
-                                "sha256": "6d74cea501cb3ede3a88330be132d77c15a48927e08997e25256c594c0bb5cd0"
+                                "sha256": "12dd7633b4879a4743d4175fa4e6fa5934279368effa75b3b6083a6269e3d4f4"
                             },
                             "filename": "lib2-0.6.7-py3-none-any.whl",
                         }
@@ -60,3 +60,9 @@ class PyPIMockUp(PyPI):
 
     def fetch_pkg_info(self, pkg_name: str) -> Optional[dict]:
         return self.pkgs[pkg_name]
+
+    def update_pkg_hash(self, pkg_name: str, pkg_version: str, pkg_hash: str):
+        pkg = self.pkgs[pkg_name]
+        assert pkg is not None
+        (item,) = pkg["releases"][pkg_version]
+        item["digests"]["sha256"] = pkg_hash

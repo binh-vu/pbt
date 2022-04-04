@@ -151,15 +151,18 @@ def pylib(cwd, name, version, deps=None, dev_deps=None):
 
     (cwd / name).mkdir(exist_ok=True, parents=True)
 
+    dependencies = {k: dcon(v) for k, v in (deps or {}).items()}
+    if "python" not in dependencies:
+        dependencies["python"] = dcon(
+            f"^{sys.version_info.major}.{sys.version_info.minor}"
+        )
+
     return Package(
         name=name,
         type=PackageType.Poetry,
         location=cwd / name,
         version=version,
-        dependencies=dict(
-            python=dcon(f"^{sys.version_info.major}.{sys.version_info.minor}"),
-            **{k: dcon(v) for k, v in (deps or {}).items()},
-        ),
+        dependencies=dependencies,
         dev_dependencies={k: dcon(v) for k, v in (dev_deps or {}).items()},
         include=[name],
         exclude=[],
