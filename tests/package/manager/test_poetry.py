@@ -113,6 +113,7 @@ def test_save():
             name="test-lib",
             version="1.0.0",
             deps={
+                "python": "^3.8",
                 "numpy": "1.21.4",
                 "networkx": "2.6.3",
                 "foo": [

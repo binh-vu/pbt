@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import subprocess
 from typing import Callable, List, Union, Optional
@@ -17,6 +18,8 @@ def exec(
     handler: Optional[Callable[[str], None]] = None,
     check_returncode: bool = True,
     cwd: Union[Path, str] = "./",
+    redirect_stderr: bool = False,
+    env: Optional[Union[list, dict]] = None,
 ) -> List[str]:
     """
     Execute a command and return the list of lines, in which the newline character is stripped away.
@@ -26,6 +29,11 @@ def exec(
         handler: function to process each line of the output.
         check_returncode: Whether to check the return code.
         cwd: working directory.
+        redirect_stderr: Whether to redirect stderr to stdout.
+        env: the environment variables to use in this process.
+            - None is use the default behavior of Popen
+            - a list of strings will be the list of environment variables to pass from the parent process
+            - a dictionary will be the environment variables to use
     """
     if isinstance(cmd, str):
         cmd = [x for x in cmd.split(" ") if x != ""]
@@ -35,8 +43,16 @@ def exec(
     if handler is None:
         handler = lambda x: None
 
+    if env is not None:
+        if isinstance(env, list):
+            env = {k: os.environ[k] for k in env if k in os.environ}
+
     p = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(cwd)
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT if redirect_stderr else None,
+        cwd=str(cwd),
+        env=env,
     )
     output = []
 

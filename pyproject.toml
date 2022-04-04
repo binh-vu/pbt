@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pab"
-version = "2.2.0"
+version = "2.2.1"
 description = "A build tool for multi-projects that leverages package registries (pypi, npmjs, etc.)"
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"
@@ -30,6 +30,7 @@ requests = "^2.27.1"
 pytest-mock = "^3.6.1"
 pytest = "^6.2.5"
 pytest-cov = "^3.0.0"
+black = "^22.3.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

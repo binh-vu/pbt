@@ -228,7 +228,12 @@ class Poetry(PkgManager):
                     os.remove(pkg.location / "pyproject.toml.backup")
 
     def clean(self, pkg: Package):
-        exec("poetry env remove python", cwd=pkg.location, check_returncode=False)
+        exec(
+            "poetry env remove python",
+            cwd=pkg.location,
+            check_returncode=False,
+            **self.exec_options("env.remove"),
+        )
         for eggdir in glob.glob(str(pkg.location / "*.egg-info")):
             shutil.rmtree(eggdir)
         shutil.rmtree(pkg.location / "dist", ignore_errors=True)
@@ -277,7 +282,10 @@ class Poetry(PkgManager):
 
         if editable and pkg.name not in self.cfg.phantom_packages:
             self.build_editable(pkg, skip_deps=skip_deps)
-            exec([self.python_path(pkg), "setup.py", "develop"], cwd=pkg.location)
+            exec(
+                [self.python_path(pkg), "setup.py", "develop"],
+                cwd=pkg.location,
+            )
             (pkg.location / "setup.py").unlink()  # remove the setup.py file
 
     def build(
@@ -312,7 +320,11 @@ class Poetry(PkgManager):
                     try:
                         if (pkg.location / "dist").exists():
                             shutil.rmtree(str(pkg.location / "dist"))
-                        exec("poetry build", cwd=pkg.location)
+                        exec(
+                            "poetry build",
+                            cwd=pkg.location,
+                            **self.exec_options("build"),
+                        )
                     finally:
                         diff.save(db)
 
@@ -345,7 +357,10 @@ class Poetry(PkgManager):
                 assert memberfile is not None
                 f.write(memberfile.read())
 
-            exec([self.python_path(pkg), "setup.py", "bdist_egg"], cwd=pkg.location)
+            exec(
+                [self.python_path(pkg), "setup.py", "bdist_egg"],
+                cwd=pkg.location,
+            )
 
     def get_fixed_version_pkgs(self):
         return self.fixed_version_pkgs
@@ -355,7 +370,7 @@ class Poetry(PkgManager):
         self.build(pkg)
         whl_path = self.wheel_path(pkg)
         assert whl_path is not None
-        output = exec(["pip", "hash", whl_path])[1]
+        output = exec([self.pip_path(pkg), "hash", whl_path])[1]
         output = output[output.find("--hash=") + len("--hash=") :]
         assert output.startswith("sha256:")
         return output[len("sha256:") :]
@@ -392,15 +407,6 @@ class Poetry(PkgManager):
         output = exec(
             "poetry env list --full-path", cwd=dir, **self.exec_options("env.fetch")
         )
-        output = [
-            line
-            for line in output
-            if not (
-                line.startswith(" ")
-                or line.startswith("\t")
-                or line.find("Warning:") != -1
-            )
-        ]
 
         if len(output) == 0:
             # environment doesn't exist, create it
@@ -451,11 +457,17 @@ class Poetry(PkgManager):
         return self.env_path(pkg.name, pkg.location) / "bin/python"  # type: ignore
 
     def exec_options(
-        self, cmd: Literal["publish", "install", "env.create", "env.fetch"]
+        self,
+        cmd: Literal[
+            "publish",
+            "install",
+            "build",
+            "env.remove",
+            "env.create",
+            "env.fetch",
+        ],
     ) -> dict:
-        if cmd in {"publish", "install"}:
-            return {}
-        return {}
+        return {"env": ["PATH"]}
 
     def parse_dep_spec(self, spec: Union[str, dict]) -> DepConstraint:
         if isinstance(spec, str):
