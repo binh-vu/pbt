@@ -147,7 +147,7 @@ def pylib(cwd, name, version, deps=None, dev_deps=None):
                 )
                 for v in version
             ]
-        return [DepConstraint(version)]
+        return [DepConstraint(version, constraint="python=* markers=")]
 
     (cwd / name).mkdir(exist_ok=True, parents=True)
 
