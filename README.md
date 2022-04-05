@@ -3,8 +3,8 @@
 <div align="center">
 <b>pbt</b> — a build tool for multi-projects that leverages package registries (pypi, npmjs, etc.).
     
-![PyPI](https://img.shields.io/pypi/v/pbt)
-![Python](https://img.shields.io/badge/python-v3.7+-blue.svg)
+![PyPI](https://img.shields.io/pypi/v/pab)
+![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
 [![GitHub Issues](https://img.shields.io/github/issues/binh-vu/pbt.svg)](https://github.com/binh-vu/pbt/issues)
 ![Contributions welcome](https://img.shields.io/badge/contributions-welcome-orange.svg)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -27,7 +27,7 @@ Note: currently, **pbt** supports Python projects configured with Poetry (an awe
 
 1. **Installing, cleaning, updating and publishing your projects**
 
-Assuming that you organized your projects as different sub-folders, each has their own project configuration file. 
+Assuming that you organized your projects as different sub-folders, each has their own project configuration file.
 In the root directory (containing your projects), you can run `install` to install a specific project
 
 ```bash
