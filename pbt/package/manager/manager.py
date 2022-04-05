@@ -254,6 +254,10 @@ class PkgManager(ABC):
                     if has_recent_version:
                         constraints[spec.constraint] = (version_spec, spec)
 
+        # sort to make the order consistent
+        if None in constraints:
+            # none is not comparable so need to convert it to empty string
+            constraints[""] = constraints.pop(None)
         return [v[1] for k, v in sorted(constraints.items(), key=itemgetter(0))]
 
     def is_version_compatible(

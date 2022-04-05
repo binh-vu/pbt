@@ -471,7 +471,8 @@ class Poetry(PkgManager):
 
     def parse_dep_spec(self, spec: Union[str, dict]) -> DepConstraint:
         if isinstance(spec, str):
-            return DepConstraint(version_spec=spec)
+            constraint = f"python=* markers="
+            return DepConstraint(version_spec=spec, constraint=constraint)
         elif isinstance(spec, dict):
             if "version" not in spec:
                 if "url" in spec:
