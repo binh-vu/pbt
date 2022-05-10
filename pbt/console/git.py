@@ -31,7 +31,6 @@ def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
             Git.auto_checkout_branch(submodule)
     elif subcommand == "update":
         Git.pull(cwd, submodules=True)
-        print(Git.find_submodules(cwd))
         # checkout the submodule to the correct branch
         for submodule in Git.find_submodules(cwd):
             logger.info("Checkout submodule {}", submodule)
