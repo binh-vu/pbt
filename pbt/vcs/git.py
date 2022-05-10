@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Optional, Union, NamedTuple
 from pbt.misc import exec
 
+
 class GitFileStatus(NamedTuple):
     is_deleted: bool
     fpath: str
@@ -24,7 +25,7 @@ class GitBranch(NamedTuple):
 
     def is_local(self) -> bool:
         return self.local is not None and self.local.find("/") == -1
-    
+
     def get_remote(self) -> Optional[str]:
         if self.local is not None:
             if self.local.find("/") != -1:
@@ -41,7 +42,7 @@ PathOrStr = Union[str, Path]
 class Git:
     @classmethod
     def get_new_modified_deleted_files(cls, cwd: PathOrStr):
-        git_dir, = exec("git rev-parse --show-toplevel", cwd=cwd)
+        (git_dir,) = exec("git rev-parse --show-toplevel", cwd=cwd)
         assert Path(git_dir).exists()
 
         output = subprocess.check_output(
@@ -88,10 +89,21 @@ class Git:
 
     @classmethod
     def does_branch_exist(cls, cwd: PathOrStr, branch: str) -> bool:
-        return subprocess.check_output(["git", "branch", "--list", branch], cwd=cwd).decode().strip() == branch
+        return (
+            subprocess.check_output(["git", "branch", "--list", branch], cwd=cwd)
+            .decode()
+            .strip()
+            == branch
+        )
 
     @classmethod
-    def checkout_branch(cls, cwd: PathOrStr, branch: str, create: bool = False, remote: Optional[str] = None):
+    def checkout_branch(
+        cls,
+        cwd: PathOrStr,
+        branch: str,
+        create: bool = False,
+        remote: Optional[str] = None,
+    ):
         if not create:
             # exist local branch
             cmd = ["git", "checkout", branch]
@@ -124,7 +136,9 @@ class Git:
 
             if x.find(" -> ") != -1:
                 remote, local = x.split(" -> ")
-                assert remote.startswith("remotes/") and len(remote.split("/")) == 3, f"Invalid remote: {remote}"
+                assert (
+                    remote.startswith("remotes/") and len(remote.split("/")) == 3
+                ), f"Invalid remote: {remote}"
             elif x.startswith("remotes/") and len(x.split("/")) == 3:
                 remote = x
                 local = None
@@ -167,7 +181,9 @@ class Git:
             elif "origin" in remotes:
                 remote = "origin"
             else:
-                raise Exception(f"Cannot identify remote for branch {name} as there are multiple remotes: {remotes}")
+                raise Exception(
+                    f"Cannot identify remote for branch {name} as there are multiple remotes: {remotes}"
+                )
 
             if Git.does_branch_exist(cwd, name):
                 # the local branch does exist, so we only need to checkout and pull
@@ -181,7 +197,13 @@ class Git:
         subprocess.check_output(["git", "init"], cwd=cwd)
 
     @classmethod
-    def pull(cls, cwd: PathOrStr, submodules: bool = False, remote: Optional[str] = None, verbose: bool = False):
+    def pull(
+        cls,
+        cwd: PathOrStr,
+        submodules: bool = False,
+        remote: Optional[str] = None,
+        verbose: bool = False,
+    ):
         if verbose:
             fn = subprocess.check_call
         else:
@@ -191,26 +213,51 @@ class Git:
             fn(["git", "pull"], cwd=cwd)
         except:
             handle = False
-            
+
             # if the the upstream branch does not set, we set it to the current remote
             try:
-                r = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=cwd)
+                r = subprocess.check_output(
+                    [
+                        "git",
+                        "rev-parse",
+                        "--abbrev-ref",
+                        "--symbolic-full-name",
+                        "@{u}",
+                    ],
+                    cwd=cwd,
+                )
             except:
                 branch = Git.get_current_branch(cwd)
                 if remote is None:
                     # try to identify the remote
-                    remotes = subprocess.check_output(["git", "remote", "-v"], cwd=cwd).decode().strip().split("\n")
+                    remotes = (
+                        subprocess.check_output(["git", "remote", "-v"], cwd=cwd)
+                        .decode()
+                        .strip()
+                        .split("\n")
+                    )
                     if len(remotes) == 1:
                         remote = remotes[0]
                     elif "origin" in remotes:
                         remote = "origin"
                     else:
-                        raise Exception(f"Can't determine the correct remote for the branch as we have multiple remotes: {remotes}")
+                        raise Exception(
+                            f"Can't determine the correct remote for the branch as we have multiple remotes: {remotes}"
+                        )
 
-                subprocess.check_output(["git", "branch", "--set-upstream-to", f"{remote}/{branch}", branch], cwd=cwd)
+                subprocess.check_output(
+                    [
+                        "git",
+                        "branch",
+                        "--set-upstream-to",
+                        f"{remote}/{branch}",
+                        branch,
+                    ],
+                    cwd=cwd,
+                )
                 fn(["git", "pull"], cwd=cwd)
                 handle = True
-            
+
             if not handle:
                 raise
 
@@ -252,24 +299,15 @@ class Git:
 
     @classmethod
     def find_submodules(cls, repo_dir: PathOrStr) -> List[Path]:
-        submodules = []
-        repo_dir = os.path.abspath(repo_dir)
+        """Find submodules of a repository."""
+        repo_dir = Path(os.path.abspath(repo_dir))
 
-        for dir in Path(repo_dir).iterdir():
-            if not dir.is_dir():
-                continue
-            superdir = (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--show-superproject-working-tree"],
-                    cwd=str(dir),
-                )
-                .decode()
-                .strip()
+        submodules = [
+            repo_dir / line.split(" ")[-1]
+            for line in exec(
+                "git config --file .gitmodules --get-regexp path", cwd=repo_dir
             )
-            # only consider submodules that are of the current project
-            if superdir == repo_dir:
-                submodules.append(dir)
-
+        ]
         return submodules
 
 
