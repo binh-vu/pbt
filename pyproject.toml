@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pab"
-version = "2.2.5"
+version = "2.2.6"
 description = "A build tool for multi-projects that leverages package registries (pypi, npmjs, etc.)"
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"
@@ -21,7 +21,7 @@ orjson = "^3.6.8"
 semver = "^2.13.0"
 loguru = ">=0.6.0"
 tomlkit = "^0.7.2"
-click = "^8.0.3"
+click = "^8.1.3"
 networkx = "^2.6.3"
 lbry-rocksdb-optimized = "^0.8.1"
 requests = "^2.27.1"

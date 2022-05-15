@@ -467,7 +467,7 @@ class Poetry(PkgManager):
             "env.fetch",
         ],
     ) -> dict:
-        return {"env": ["PATH"]}
+        return {"env": ["PATH", "POETRY_VIRTUALENVS_PATH"]}
 
     def parse_dep_spec(self, spec: Union[str, dict]) -> DepConstraint:
         if isinstance(spec, str):
