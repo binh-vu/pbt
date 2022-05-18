@@ -165,6 +165,7 @@ class BTPipeline:
                     and dep.name not in pkg.dev_dependencies
                 }
 
+                logger.info("Installing package: {}", pkg.name)
                 manager.install(
                     pkg,
                     editable=editable,
@@ -175,6 +176,7 @@ class BTPipeline:
 
                 for dep in deps:
                     if isinstance(dep, Package):
+                        logger.info("Installing local dependency: {}", dep.name)
                         skip_dep_deps = list(dep.dependencies.keys()) + list(
                             dep.dev_dependencies.keys()
                         )
@@ -226,16 +228,3 @@ class BTPipeline:
             for name, pkg in sorted(publishing_pkgs.items(), key=itemgetter(0)):
                 if diffs[name].is_version_diff:
                     self.managers[pkg.type].publish(pkg)
-
-    def build_editable(self, pkg_names: List[str]):
-        """Build packages
-
-        Args:
-            pkg_names: name of packages to build
-        """
-        pkgs = [self.pkgs[name] for name in pkg_names]
-
-        with build_cache():
-            for pkg in pkgs:
-                manager = self.managers[pkg.type]
-                manager.build_editable(pkg)

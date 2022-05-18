@@ -91,18 +91,6 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def build_editable(
-        self,
-        package: Package,
-    ):
-        """Build the package in editable mode. If it has been built before during PBT running, we may skip the build step (i.e., caching results).
-
-        Args:
-            package: The package to build
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
     def install_dependency(
         self,
         package: Package,

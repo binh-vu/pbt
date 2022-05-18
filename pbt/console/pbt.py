@@ -9,6 +9,7 @@ from pbt.package.manager.poetry import Poetry
 from pbt.package.package import PackageType
 from pbt.package.pipeline import BTPipeline, VersionConsistent
 from pbt.package.registry.pypi import PyPI
+from pbt.package.manager.manager import build_cache
 
 
 def init(
@@ -180,7 +181,15 @@ def publish(package: List[str], cwd: str = ".", verbose: bool = False):
     is_flag=True,
     help="increase verbosity",
 )
-def build_editable(package: List[str], cwd: str = ".", verbose: bool = False):
-    """Build packages in editable mode"""
+def create_setuppy(package: List[str], cwd: str = ".", verbose: bool = False):
+    """Create setup.py file of a python package"""
     pl, cfg, pkgs = init(cwd, package, verbose)
-    pl.build_editable(package)
+
+    with build_cache():
+        for pkg_name in pkgs:
+            pkg = pl.pkgs[pkg_name]
+            manager = pl.managers[pkg.type]
+            assert isinstance(
+                manager, Poetry
+            ), "Only create setup.py for Poetry packages"
+            manager.create_setup_py(pkg)

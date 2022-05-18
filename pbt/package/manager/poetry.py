@@ -281,11 +281,12 @@ class Poetry(PkgManager):
                     )
 
         if editable and pkg.name not in self.cfg.phantom_packages:
-            self.build_editable(pkg, skip_deps=skip_deps)
-            exec(
-                [self.python_path(pkg), "setup.py", "develop"],
-                cwd=pkg.location,
-            )
+            self.create_setup_py(pkg, skip_deps=skip_deps)
+            with self.mask_file(pkg.location / "pyproject.toml"):
+                exec(
+                    [self.pip_path(pkg), "install", "-e", "."],
+                    cwd=pkg.location,
+                )
             (pkg.location / "setup.py").unlink()  # remove the setup.py file
 
     def build(
@@ -330,7 +331,7 @@ class Poetry(PkgManager):
 
                     built_pkgs[build_ident] = build_opts
 
-    def build_editable(
+    def build_eggfile(
         self,
         pkg: Package,
         skip_deps: Optional[List[str]] = None,
@@ -346,21 +347,14 @@ class Poetry(PkgManager):
         for eggdir in glob.glob(str(pkg.location / "*.egg-info")):
             shutil.rmtree(eggdir)
 
-        self.build(pkg, skip_deps)
-
-        tar_path = self.tar_path(pkg)
-        assert tar_path is not None
-        with tarfile.open(tar_path, "r") as g:
-            member = g.getmember(f"{pkg.name}-{pkg.version}/setup.py")
-            with open(pkg.location / "setup.py", "wb") as f:
-                memberfile = g.extractfile(member)
-                assert memberfile is not None
-                f.write(memberfile.read())
-
-            exec(
-                [self.python_path(pkg), "setup.py", "bdist_egg"],
-                cwd=pkg.location,
-            )
+        self.create_setup_py(pkg, skip_deps)
+        has_build = (pkg.location / "build").exists()
+        exec(
+            [self.python_path(pkg), "setup.py", "bdist_egg"],
+            cwd=pkg.location,
+        )
+        if not has_build and (pkg.location / "build").exists():
+            shutil.rmtree(str(pkg.location / "build"))
 
     def get_fixed_version_pkgs(self):
         return self.fixed_version_pkgs
@@ -387,10 +381,11 @@ class Poetry(PkgManager):
         exec([self.pip_path(pkg), "uninstall", "-y", dependency.name])
 
         if editable:
-            self.build_editable(dependency, skip_deps=skip_dep_deps)
-            exec(
-                [self.python_path(pkg), "setup.py", "develop"], cwd=dependency.location
-            )
+            self.create_setup_py(dependency, skip_deps=skip_dep_deps)
+            with self.mask_file(dependency.location / "pyproject.toml"):
+                exec(
+                    [self.pip_path(pkg), "install", "-e", "."], cwd=dependency.location
+                )
             (dependency.location / "setup.py").unlink()  # remove the setup.py file
         else:
             self.build(
@@ -400,6 +395,43 @@ class Poetry(PkgManager):
             whl_path = self.wheel_path(dependency)
             assert whl_path is not None
             exec([self.pip_path(pkg), "install", whl_path])
+
+    @contextmanager  # type: ignore
+    def mask_file(
+        self,
+        file_path: Union[str, Path],
+    ):
+        """Temporary mask out a file"""
+        file_path = str(file_path)
+        assert os.path.isfile(file_path)
+        try:
+            os.rename(file_path, file_path + ".tmp")
+            yield None
+        finally:
+            os.rename(file_path + ".tmp", file_path)
+
+    def create_setup_py(
+        self,
+        pkg: Package,
+        skip_deps: Optional[List[str]] = None,
+    ):
+        """Create setup.py that can be used to install in editable mode as poetry does not
+        provide it out of the box.
+
+        Args:
+            pkg: Package to build
+            skip_deps: The dependencies to ignore when building the package
+        """
+        self.build(pkg, skip_deps)
+
+        tar_path = self.tar_path(pkg)
+        assert tar_path is not None, pkg.location
+        with tarfile.open(tar_path, "r") as g:
+            member = g.getmember(f"{pkg.name}-{pkg.version}/setup.py")
+            with open(pkg.location / "setup.py", "wb") as f:
+                memberfile = g.extractfile(member)
+                assert memberfile is not None
+                f.write(memberfile.read())
 
     @cache_func()
     def env_path(self, name: str, dir: Path) -> Path:
