@@ -51,6 +51,15 @@ class PyPI(PkgRegistry):
             )
         return lst[0]["digests"]["sha256"]
 
+    def get_latest_version(self, pkg_name: str) -> Optional[str]:
+        pkg_info = self.fetch_pkg_info(pkg_name)
+        if pkg_info is None:
+            return None
+
+        releases: Dict[str, Any] = pkg_info["releases"]
+        latest_version = max(releases.keys(), key=PkgManager.parse_version)
+        return latest_version
+
     def get_latest_version_and_hash(self, pkg_name: str) -> Optional[Tuple[str, str]]:
         pkg_info = self.fetch_pkg_info(pkg_name)
         if pkg_info is None:
