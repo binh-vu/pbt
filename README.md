@@ -64,12 +64,12 @@ pbt clean [-p <package>]
 
 - `-p`: specify the package we want to build, if empty build all packages.
 
-5. **Build an egg-package**
+5. **Create setup.py**
 
-Build egg package and also generate a `setup.py` file that can be used to manually install in editable mode as poetry does not provide it out of the box. This is usually used for debugging.
+Generate a `setup.py` file that can be used to manually install in editable mode as poetry does not provide it out of the box at the time of writing. This is usually used for debugging. Note that if you install `pip install -e .`, you need to rename the file `pyproject.toml` temporary so that `pip` will use `setup.py` instead of `pyproject.toml`.
 
 ```bash
-pbt build-editable -p <project>
+pbt create-setuppy -p <project>
 ```
 
 6. **Git clone a multi-repository project**

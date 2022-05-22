@@ -5,12 +5,21 @@ from loguru import logger
 
 from pbt.console.pbt import install, clean, update, publish, create_setuppy, list
 from pbt.console.git import git
+from pbt.package.registry.pypi import PyPI
 
 
 try:
     version = importlib.metadata.version("pab")
 except importlib.metadata.PackageNotFoundError:
     version = "0.0.0"
+
+
+def check_latest():
+    latest_version = PyPI.get_instance().get_latest_version("pab")
+    if latest_version is not None and version != latest_version:
+        logger.warning(
+            f"You are using an outdated version of pab. The latest version is {latest_version}, while you are using {version}."
+        )
 
 
 @click.group(
