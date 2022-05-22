@@ -32,7 +32,7 @@ class Poetry(PkgManager):
         return str(root.absolute() / "**/pyproject.toml")
 
     @contextmanager  # type: ignore
-    def mask(
+    def mask_dependencies(
         self,
         pkg: Package,
         skip_deps: List[str],
@@ -257,7 +257,7 @@ class Poetry(PkgManager):
         additional_deps = additional_deps or {}
         options = "--no-dev" if not include_dev else ""
 
-        with self.mask(pkg, skip_deps, additional_deps):
+        with self.mask_dependencies(pkg, skip_deps, additional_deps):
             try:
                 exec(
                     f"poetry install {options}",
@@ -282,9 +282,12 @@ class Poetry(PkgManager):
 
         if editable and pkg.name not in self.cfg.phantom_packages:
             self.create_setup_py(pkg, skip_deps=skip_deps)
+            # load pip_path outside of mask_file as without pyproject.toml, it is not a poetry package
+            # and we may get pip path from the wrong environment
+            pip_path = self.pip_path(pkg)
             with self.mask_file(pkg.location / "pyproject.toml"):
                 exec(
-                    [self.pip_path(pkg), "install", "-e", "."],
+                    [pip_path, "install", "-e", "."],
                     cwd=pkg.location,
                 )
             (pkg.location / "setup.py").unlink()  # remove the setup.py file
@@ -308,7 +311,7 @@ class Poetry(PkgManager):
                 return
 
             with diff_db(pkg, self.cfg) as db:
-                with self.mask(pkg, skip_deps, additional_deps):
+                with self.mask_dependencies(pkg, skip_deps, additional_deps):
                     diff = Diff.from_local(db, self, pkg)
                     if (
                         self.wheel_path(pkg) is not None
@@ -378,14 +381,16 @@ class Poetry(PkgManager):
     ):
         assert dependency.name not in self.cfg.phantom_packages, dependency.name
         skip_dep_deps = skip_dep_deps or []
-        exec([self.pip_path(pkg), "uninstall", "-y", dependency.name])
+
+        # load pip_path outside of mask_file as without pyproject.toml, it is not a poetry package
+        # and we may get pip path from the wrong environment
+        pip_path = self.pip_path(pkg)
+        exec([pip_path, "uninstall", "-y", dependency.name])
 
         if editable:
             self.create_setup_py(dependency, skip_deps=skip_dep_deps)
             with self.mask_file(dependency.location / "pyproject.toml"):
-                exec(
-                    [self.pip_path(pkg), "install", "-e", "."], cwd=dependency.location
-                )
+                exec([pip_path, "install", "-e", "."], cwd=dependency.location)
             (dependency.location / "setup.py").unlink()  # remove the setup.py file
         else:
             self.build(
@@ -394,7 +399,7 @@ class Poetry(PkgManager):
             )
             whl_path = self.wheel_path(dependency)
             assert whl_path is not None
-            exec([self.pip_path(pkg), "install", whl_path])
+            exec([pip_path, "install", whl_path])
 
     @contextmanager  # type: ignore
     def mask_file(
@@ -436,6 +441,11 @@ class Poetry(PkgManager):
     @cache_func()
     def env_path(self, name: str, dir: Path) -> Path:
         """Get environment path of the package, create it if doesn't exist"""
+        if not (dir / "pyproject.toml").exists():
+            raise Exception(
+                "Try to get the virtualenv location of an non-poetry package (no pyproject.toml). This won't return the right path. Please report this issue."
+            )
+
         output = exec(
             "poetry env list --full-path", cwd=dir, **self.exec_options("env.fetch")
         )
