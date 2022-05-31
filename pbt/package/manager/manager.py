@@ -358,7 +358,7 @@ class PkgManager(ABC):
     @cache_func()
     def parse_version(cls, version: str) -> semver.VersionInfo:
         m = re.match(
-            r"^(?P<major>\d+)(?P<minor>\.\d+)?(?P<patch>\.\d+)?(?P<rest>[^\d\.].*)?$",
+            r"^(?P<major>\d+)(?P<minor>\.\d+)?(?P<patch>\.\d+)?(?P<rest>[^\d].*)?$",
             version,
         )
         assert (
