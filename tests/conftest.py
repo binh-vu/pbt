@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from operator import attrgetter
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, cast
 
 import pytest
 from loguru import logger
@@ -231,7 +231,10 @@ def make_pyrepo(cwd: Path, libs: List[Package], submodules: List[Package]):
         }
     setup_dir(tree, cwd)
 
-    poetry = Poetry(cfg)
+    managers: Dict[PackageType, PkgManager] = {}
+    managers[PackageType.Poetry] = Poetry(cfg, managers)
+    poetry = cast(Poetry, managers[PackageType.Poetry])
+
     for lib in libs:
         poetry.save(lib)
         poetry.clean(lib)

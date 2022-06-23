@@ -1,10 +1,13 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Dict, cast
 
 from click import edit
 import glob
 from pbt.config import PBTConfig
+from pbt.package.manager.manager import PkgManager
 from pbt.package.manager.poetry import Poetry
+from pbt.package.package import PackageType
 from tests.conftest import (
     PipFreezePkgInfo,
     Repo,
@@ -15,7 +18,10 @@ from tests.conftest import (
 
 def test_env_path(repo1):
     lib0 = repo1.packages["lib0"]
-    poetry = Poetry(repo1.cfg)
+
+    managers: Dict[PackageType, PkgManager] = {}
+    managers[PackageType.Poetry] = Poetry(repo1.cfg, managers)
+    poetry = cast(Poetry, managers[PackageType.Poetry])
 
     pippath = poetry.pip_path(lib0)
     pythonpath = poetry.pip_path(lib0)
@@ -106,7 +112,10 @@ def test_save():
             ignore_packages=set(),
             phantom_packages=set(),
         )
-        poetry = Poetry(cfg)
+
+        managers: Dict[PackageType, PkgManager] = {}
+        managers[PackageType.Poetry] = Poetry(cfg, managers)
+        poetry = cast(Poetry, managers[PackageType.Poetry])
 
         lib = pylib(
             tmpdir,

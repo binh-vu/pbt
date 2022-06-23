@@ -1,9 +1,12 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Dict, cast
 from pbt.config import PBTConfig
 from pbt.misc import exec
 from pbt.package.manager.poetry import Poetry
 from pbt.package.package import Package, PackageType
+
+from pbt.package.manager.manager import PkgManager
 
 
 def test_exec():
@@ -21,7 +24,10 @@ def test_exec():
             ignore_packages=set(),
             phantom_packages=set(),
         )
-        poetry = Poetry(cfg)
+
+        managers: Dict[PackageType, PkgManager] = {}
+        managers[PackageType.Poetry] = Poetry(cfg, managers)
+        poetry = cast(Poetry, managers[PackageType.Poetry])
 
         pkg = Package(
             name="test",
