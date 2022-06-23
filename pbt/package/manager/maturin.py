@@ -262,22 +262,29 @@ class Maturin(PkgManager):
         if include_dev and pkg.optional_dep_name is not None:
             options += " --extras=" + pkg.optional_dep_name
 
-        options = self.exec_options("install")
+        exc_options = self.exec_options("install")
         if virtualenv is None:
             virtualenv = self.env_path(pkg.name, pkg.location)
 
         # set the virtual environment which the package will be installed to
-        if "env" not in options:
-            options["env"] = {}
-        options["env"] = {"VIRTUAL_ENV": str(virtualenv)}
+        if "env" not in exc_options:
+            exc_options["env"] = {"VIRTUAL_ENV": str(virtualenv)}
+        elif isinstance(exc_options["env"], list):
+            exc_options["env"].append({"name": "VIRTUAL_ENV", "value": str(virtualenv)})
+        else:
+            exc_options["env"]["VIRTUAL_ENV"] = str(virtualenv)
 
         if editable:
             with self.mask_dependencies(pkg, skip_deps, additional_deps):
-                exec(f"maturin develop -r {options}", cwd=pkg.location, **options)
+                exec(f"maturin develop -r {options}", cwd=pkg.location, **exc_options)
         else:
             with self.mask_dependencies(pkg, skip_deps, additional_deps):
-                exec(f"maturin build -r", cwd=pkg.location, **options)
-                exec(f"pip install {self.wheel_path(pkg)}", cwd=pkg.location, **options)
+                exec(f"maturin build -r", cwd=pkg.location, **exc_options)
+                exec(
+                    f"pip install {self.wheel_path(pkg)}",
+                    cwd=pkg.location,
+                    **exc_options,
+                )
 
     def build(
         self,
@@ -368,7 +375,7 @@ class Maturin(PkgManager):
         self,
         cmd: Literal["publish", "install", "build", "clean", "env.create"],
     ) -> dict:
-        return {}
+        return {"env": ["PATH", "CC", "CXX"]}
 
     @contextmanager  # type: ignore
     def mask_dependencies(

@@ -403,7 +403,7 @@ class Poetry(PkgManager):
                 with manager.mask_file(dependency.location / "pyproject.toml"):
                     exec([pip_path, "install", "-e", "."], cwd=dependency.location)
                 (dependency.location / "setup.py").unlink()  # remove the setup.py file
-            if dependency.type == PackageType.Maturin:
+            elif dependency.type == PackageType.Maturin:
                 manager = cast("Maturin", dep_manager)
                 manager.install(
                     cast("MaturinPackage", dependency),

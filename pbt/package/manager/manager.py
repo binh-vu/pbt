@@ -177,7 +177,10 @@ class PkgManager(ABC):
             dir_paths.append(depfile)
 
         if len(patterns) > 0:
-            raise NotImplementedError()
+            for pattern in patterns:
+                if not (pattern.endswith("/**/*") and pattern[:-5].find("*") == -1):
+                    raise NotImplementedError()
+                dir_paths.append(pattern[:-5])
 
         output = []
         for file in files:

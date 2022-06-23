@@ -2,10 +2,14 @@ import os
 from pathlib import Path
 import subprocess
 from typing import Callable, List, Union, Optional
+from typing_extensions import TypedDict
 
 
 class ExecProcessError(Exception):
     pass
+
+
+NewEnvVar = TypedDict("NewEnvVar", name=str, value=str)
 
 
 def stdout(line):
@@ -19,7 +23,7 @@ def exec(
     check_returncode: bool = True,
     cwd: Union[Path, str] = "./",
     redirect_stderr: bool = False,
-    env: Optional[Union[list, dict]] = None,
+    env: Optional[Union[List[Union[str, NewEnvVar]], dict]] = None,
 ) -> List[str]:
     """
     Execute a command and return the list of lines, in which the newline character is stripped away.
@@ -32,7 +36,9 @@ def exec(
         redirect_stderr: Whether to redirect stderr to stdout.
         env: the environment variables to use in this process.
             - None is use the default behavior of Popen
-            - a list of strings will be the list of environment variables to pass from the parent process
+            - a list of strings/dictionaries:
+                - if the item is a string, it is the environment variable to pass from the parent process
+                - if the item is a dictionary, it is the new environment variable to set, has the following format: { name: <name>, value: <value> }
             - a dictionary will be the environment variables to use
     """
     if isinstance(cmd, str):
@@ -45,7 +51,15 @@ def exec(
 
     if env is not None:
         if isinstance(env, list):
-            env = {k: os.environ[k] for k in env if k in os.environ}
+            tmp = {}
+            for item in env:
+                if isinstance(item, str):
+                    if item in os.environ:
+                        tmp[item] = os.environ[item]
+                else:
+                    assert isinstance(item, dict)
+                    tmp[item["name"]] = item["value"]
+            env = tmp
 
     p = subprocess.Popen(
         cmd,
