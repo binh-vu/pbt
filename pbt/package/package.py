@@ -4,6 +4,7 @@ from distutils.version import Version
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional
+from typing_extensions import TypeGuard
 
 from semver import VersionInfo
 from loguru import logger
@@ -28,6 +29,14 @@ class Package:
 
 class PackageType(str, Enum):
     Poetry = "poetry"
+    Maturin = "maturin"
+
+    def is_compatible(self, other: PackageType) -> bool:
+        return (
+            self == other
+            or (self == PackageType.Poetry and other == PackageType.Maturin)
+            or (self == PackageType.Maturin and other == PackageType.Poetry)
+        )
 
 
 @dataclass(eq=True)
@@ -141,3 +150,9 @@ class VersionSpec:
             is_lowerbound_inclusive=is_lb_inclusive,
             is_upperbound_inclusive=is_ub_inclusive,
         )
+
+    def to_pep508_string(self):
+        s = f">{'=' if self.is_lowerbound_inclusive else ''} {str(self.lowerbound)}"
+        if self.upperbound is not None:
+            s += f", <{'=' if self.is_upperbound_inclusive else ''} {str(self.upperbound)}"
+        return s

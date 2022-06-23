@@ -40,6 +40,8 @@ class BTPipeline:
         pkgs = {}
         for manager in self.managers.values():
             for fpath in glob.glob(manager.glob_query(self.root), recursive=True):
+                if not manager.is_package_directory(Path(fpath).parent):
+                    continue
                 pkg = manager.load(Path(fpath).parent)
                 if pkg.name in pkgs:
                     raise RuntimeError(f"Duplicate package {pkg.name}")

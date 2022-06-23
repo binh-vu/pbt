@@ -1,27 +1,26 @@
 from io import DEFAULT_BUFFER_SIZE
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import click
 from loguru import logger
 
 from pbt.config import PBTConfig
 from pbt.package.manager.poetry import Poetry
+from pbt.package.manager.maturin import Maturin
 from pbt.package.package import PackageType
 from pbt.package.pipeline import BTPipeline, VersionConsistent
 from pbt.package.registry.pypi import PyPI
-from pbt.package.manager.manager import build_cache
+from pbt.package.manager.manager import PkgManager, build_cache
 
 
 def init(
     cwd: str, packages: List[str], verbose: bool
 ) -> Tuple[BTPipeline, PBTConfig, List[str]]:
     cfg = PBTConfig.from_dir(cwd)
-    pl = BTPipeline(
-        cfg.cwd,
-        managers={
-            PackageType.Poetry: Poetry(cfg),
-        },
-    )
+    managers: Dict[PackageType, PkgManager] = {}
+    managers[PackageType.Poetry] = Poetry(cfg, managers)
+    managers[PackageType.Maturin] = Maturin(cfg, managers)
+    pl = BTPipeline(cfg.cwd, managers=managers)
     pl.discover()
 
     if len(packages) == 0:

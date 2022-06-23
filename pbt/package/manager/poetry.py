@@ -7,7 +7,7 @@ import tarfile
 from contextlib import contextmanager
 from operator import attrgetter
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Union, cast, TYPE_CHECKING
 
 from loguru import logger
 from pbt.config import PBTConfig
@@ -18,15 +18,23 @@ from pbt.package.package import DepConstraint, DepConstraints, Package, PackageT
 from tomlkit.api import document, dumps, inline_table, loads, nl, table
 from tomlkit.items import Array, Key, KeyType, Trivia
 
+if TYPE_CHECKING:
+    from pbt.package.manager.maturin import Maturin, MaturinPackage
+
 
 class Poetry(PkgManager):
-    def __init__(self, cfg: PBTConfig) -> None:
+    def __init__(self, cfg: PBTConfig, managers: Dict[PackageType, PkgManager]) -> None:
         super().__init__()
+        self.managers = managers
         self.cfg = cfg
         self.fixed_version_pkgs = {"python"}
 
     def is_package_directory(self, dir: Path) -> bool:
-        return (dir / "pyproject.toml").exists()
+        if (dir / "pyproject.toml").exists():
+            return (dir / "pyproject.toml").read_text().find(
+                'build-backend = "poetry.core.masonry.api"'
+            ) != -1
+        return False
 
     def glob_query(self, root: Path) -> str:
         return str(root.absolute() / "**/pyproject.toml")
@@ -141,7 +149,7 @@ class Poetry(PkgManager):
     def save(self, pkg: Package):
         poetry_file = pkg.location / "pyproject.toml"
         if not poetry_file.exists():
-            with open(pkg.location / "pyproject.toml", "w") as f:
+            with open(poetry_file, "w") as f:
                 doc = document()
 
                 tbl = table()
@@ -247,7 +255,7 @@ class Poetry(PkgManager):
 
     def install(
         self,
-        pkg: Package,
+        package: Package,
         editable: bool = False,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
@@ -257,11 +265,11 @@ class Poetry(PkgManager):
         additional_deps = additional_deps or {}
         options = "--no-dev" if not include_dev else ""
 
-        with self.mask_dependencies(pkg, skip_deps, additional_deps):
+        with self.mask_dependencies(package, skip_deps, additional_deps):
             try:
                 exec(
                     f"poetry install {options}",
-                    cwd=pkg.location,
+                    cwd=package.location,
                     **self.exec_options("install"),
                 )
             except ExecProcessError as e:
@@ -271,26 +279,26 @@ class Poetry(PkgManager):
                     # try to update the lock file without upgrade previous packages, and retry
                     exec(
                         "poetry lock --no-update",
-                        cwd=pkg.location,
+                        cwd=package.location,
                         **self.exec_options("install"),
                     )
                     exec(
                         f"poetry install {options}",
-                        cwd=pkg.location,
+                        cwd=package.location,
                         **self.exec_options("install"),
                     )
 
-        if editable and pkg.name not in self.cfg.phantom_packages:
-            self.create_setup_py(pkg, skip_deps=skip_deps)
+        if editable and package.name not in self.cfg.phantom_packages:
+            self.create_setup_py(package, skip_deps=skip_deps)
             # load pip_path outside of mask_file as without pyproject.toml, it is not a poetry package
             # and we may get pip path from the wrong environment
-            pip_path = self.pip_path(pkg)
-            with self.mask_file(pkg.location / "pyproject.toml"):
+            pip_path = self.pip_path(package)
+            with self.mask_file(package.location / "pyproject.toml"):
                 exec(
                     [pip_path, "install", "-e", "."],
-                    cwd=pkg.location,
+                    cwd=package.location,
                 )
-            (pkg.location / "setup.py").unlink()  # remove the setup.py file
+            (package.location / "setup.py").unlink()  # remove the setup.py file
 
     def build(
         self,
@@ -387,16 +395,26 @@ class Poetry(PkgManager):
         pip_path = self.pip_path(pkg)
         exec([pip_path, "uninstall", "-y", dependency.name])
 
+        dep_manager = self.managers[dependency.type]
         if editable:
-            self.create_setup_py(dependency, skip_deps=skip_dep_deps)
-            with self.mask_file(dependency.location / "pyproject.toml"):
-                exec([pip_path, "install", "-e", "."], cwd=dependency.location)
-            (dependency.location / "setup.py").unlink()  # remove the setup.py file
+            if dependency.type == PackageType.Poetry:
+                manager = cast("Poetry", dep_manager)
+                manager.create_setup_py(dependency, skip_deps=skip_dep_deps)
+                with manager.mask_file(dependency.location / "pyproject.toml"):
+                    exec([pip_path, "install", "-e", "."], cwd=dependency.location)
+                (dependency.location / "setup.py").unlink()  # remove the setup.py file
+            if dependency.type == PackageType.Maturin:
+                manager = cast("Maturin", dep_manager)
+                manager.install(
+                    cast("MaturinPackage", dependency),
+                    editable=editable,
+                    skip_deps=skip_dep_deps,
+                    virtualenv=self.env_path(pkg.name, pkg.location),
+                )
+            else:
+                raise NotImplementedError(type(dep_manager))
         else:
-            self.build(
-                dependency,
-                skip_deps=skip_dep_deps,
-            )
+            dep_manager.build(dependency, skip_deps=skip_dep_deps)
             whl_path = self.wheel_path(dependency)
             assert whl_path is not None
             exec([pip_path, "install", whl_path])

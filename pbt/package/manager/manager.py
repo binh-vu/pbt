@@ -82,11 +82,13 @@ class PkgManager(ABC):
     def build(
         self,
         package: Package,
+        skip_deps: Optional[List[str]] = None,
     ):
         """Build the package. If it has been built before during PBT running, we may skip the build step (i.e., caching results).
 
         Args:
             package: The package to build
+            skip_deps: The optional list of dependencies to skip
         """
         raise NotImplementedError()
 

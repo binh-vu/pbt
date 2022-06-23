@@ -52,7 +52,7 @@ class PkgGraph:
                     else:
                         dep_pkg = g.nodes[dep]["pkg"]
                         if isinstance(dep_pkg, ThirdPartyPackage):
-                            assert dep_pkg.type == pkg.type
+                            assert dep_pkg.type.is_compatible(pkg.type)
                             dep_pkg.invert_dependencies[pkg.name] = specs
                     g.add_edge(pkg.name, dep, is_dev=is_dev)
 
