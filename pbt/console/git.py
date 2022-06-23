@@ -35,6 +35,12 @@ def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
         for submodule in Git.find_submodules(cwd):
             logger.info("Checkout submodule {}", submodule)
             Git.auto_checkout_branch(submodule)
+    elif subcommand == "push":
+        pbt_cfg = PBTConfig.from_dir(cwd)
+        cwd = str(pbt_cfg.cwd.absolute())
+        Git.push(cwd)
+        for submodule_dir in Git.find_submodules(cwd):
+            Git.push(submodule_dir)
     elif subcommand == "snapshot":
         pbt_cfg = PBTConfig.from_dir(cwd)
         cwd = str(pbt_cfg.cwd.absolute())

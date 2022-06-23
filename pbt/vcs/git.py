@@ -197,6 +197,10 @@ class Git:
         subprocess.check_output(["git", "init"], cwd=cwd)
 
     @classmethod
+    def push(cls, cwd: PathOrStr):
+        exec("git push", cwd=cwd)
+
+    @classmethod
     def pull(
         cls,
         cwd: PathOrStr,
