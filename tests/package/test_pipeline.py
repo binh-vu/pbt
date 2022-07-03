@@ -3,7 +3,8 @@ from pbt.package.package import Package, PackageType
 from pbt.package.pipeline import BTPipeline, VersionConsistent
 from pbt.package.manager.poetry import Poetry
 from pbt.package.registry.registry import PkgRegistry
-from tests.conftest import PipFreezePkgInfo, Repo, get_dependencies, setup_dir
+from tests.conftest import Repo, setup_dir
+from tests.python_helper import PipFreezePkgInfo, PipDependencyQuery
 from pbt.misc import exec
 
 
@@ -26,10 +27,14 @@ def test_python_install(repo1: Repo):
     pl = BTPipeline(repo1.cfg, managers={PackageType.Poetry: poetry})
     pl.discover()
 
-    assert get_dependencies(poetry.pip_path(lib2)) == []
+    assert (
+        PipDependencyQuery.get_instance().get_dependencies(poetry.pip_path(lib2)) == []
+    )
     pl.install([lib2.name])
 
-    assert get_dependencies(poetry.pip_path(lib2)) == [
+    assert PipDependencyQuery.get_instance().get_dependencies(
+        poetry.pip_path(lib2)
+    ) == [
         PipFreezePkgInfo(name=lib0.name, editable=True, version="0.5.1"),
         PipFreezePkgInfo(name=lib1.name, editable=True, version="0.2.1"),
         PipFreezePkgInfo(name=lib2.name, editable=True, version="0.6.7"),
@@ -139,5 +144,5 @@ def test_publish(repo1: Repo, mockup_pypi: PkgRegistry, mocker: MockerFixture):
         [
             mocker.call(pl.pkgs["lib0"]),
             mocker.call(pl.pkgs["lib2"]),
-        ]
+        ]  # type: ignore
     )

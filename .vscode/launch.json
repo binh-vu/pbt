@@ -11,7 +11,8 @@
             "module": "pytest",
             "args": [
                 "-svv",
-                "tests/test_diff.py::test_remote_diff"
+                "-k",
+                "test_install_dependency"
             ],
         }
     ]

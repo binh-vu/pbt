@@ -5,11 +5,10 @@ import glob
 from pbt.config import PBTConfig
 from pbt.package.manager.poetry import Poetry
 from tests.conftest import (
-    PipFreezePkgInfo,
     Repo,
-    get_dependencies,
     pylib,
 )
+from tests.python_helper import PipDependencyQuery, PipFreezePkgInfo
 
 
 def test_env_path(repo1):
@@ -64,6 +63,8 @@ def test_install_dependency(repo2: Repo):
 
     lib0_latest_pypi = "0.5.2"
     assert lib0.version != lib0_latest_pypi
+
+    get_dependencies = PipDependencyQuery.get_instance().get_dependencies
 
     # install lib1 should not install lib0 if skipping dependencies is set.
     repo2.poetry.install_dependency(lib2, lib1, skip_dep_deps=[lib0.name])
