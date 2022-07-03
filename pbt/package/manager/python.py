@@ -4,14 +4,14 @@ import glob
 import os
 from pathlib import Path
 import shutil
-from typing import Dict, List, Literal, Optional, Union, cast
+from typing import Callable, Dict, List, Literal, Optional, Union, cast
 
 from loguru import logger
 from pbt.config import PBTConfig
 from pbt.misc import cache_method, exec
 from pbt.package.manager.manager import PkgManager, build_cache
 from pbt.package.package import DepConstraints, Package, PackageType
-from tomlkit.api import loads
+from tomlkit.api import loads, dumps
 from pbt.diff import Diff, diff_db
 
 
@@ -298,3 +298,29 @@ class Pep518PkgManager(PythonPkgManager):
                 logger.error("Inavlid TOML file: {}", infile)
                 raise
         return self.cache_pyprojects[infile]
+
+    def update_pyproject(self, pyproject_file: Path, update_fn: Callable[[dict], bool]):
+        """Update project metadata.
+
+        Arguments:
+            pyproject_file: path to the pyproject.toml file
+            update_fn: function to update the document, return true if the document is modified
+        """
+        doc = self.parse_pyproject(pyproject_file)
+        if update_fn(doc):
+            success = False
+            pyproject_file_backup = pyproject_file.parent / "pyproject.toml.backup"
+            shutil.move(
+                pyproject_file,
+                pyproject_file_backup,
+            )
+            try:
+                with open(pyproject_file, "w") as f:
+                    f.write(dumps(doc))  # type: ignore
+                del self.cache_pyprojects[str(pyproject_file.absolute())]
+                success = True
+            finally:
+                if not success:
+                    shutil.move(pyproject_file_backup, pyproject_file)
+                else:
+                    os.remove(pyproject_file_backup)
