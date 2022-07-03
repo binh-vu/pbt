@@ -2,7 +2,7 @@ import os
 import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 import orjson

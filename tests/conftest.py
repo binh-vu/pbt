@@ -45,22 +45,6 @@ class Repo:
             pkg.exclude = tmp.exclude
 
 
-@dataclass
-class PipFreezePkgInfo:
-    name: str
-    editable: bool = False
-    version: Optional[str] = None
-    path: Optional[str] = None
-
-    def __eq__(self, other):
-        return (
-            isinstance(other, PipFreezePkgInfo)
-            and self.name == other.name
-            and self.editable == other.editable
-            and self.version == other.version
-        )
-
-
 def setup_dir(dir: Directory, cwd: Union[Path, str]):
     """Create a directory tree with files and folder"""
     cwd = Path(cwd)
@@ -80,88 +64,6 @@ def setup_dir(dir: Directory, cwd: Union[Path, str]):
             assert isinstance(item, dict)
             (cwd / name).mkdir(exist_ok=True)
             setup_dir(item, cwd / name)
-
-
-def get_dependencies(
-    pip_file: Union[str, Path], ignore_editable: bool = False
-) -> List[PipFreezePkgInfo]:
-    """Get installed packages from pip freeze.
-
-    Arguments:
-        pip_file: pip executable
-        ignore_editable: whether to ignore editable detection.
-    """
-    lines = exec([pip_file, "freeze"])
-
-    managers: List[PkgManager] = []
-
-    pkg_name = r"(?P<pkg>[a-zA-Z0-9-_]+)"
-    pkgs = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        if line.startswith("#"):
-            # expect the next one is editable
-            m = re.match(
-                rf"# Editable(?: Git)? install with no (?:remote|version control) \({pkg_name}==(?P<version>[^)]+)\)",
-                line,
-            )
-            assert m is not None, f"`{line}`"
-            i += 1
-            line = lines[i]
-            m2 = re.match(rf"-e (?P<path>.+)", line)
-            assert m2 is not None, f"`{line}`"
-            pkgs.append(
-                PipFreezePkgInfo(
-                    name=m.group("pkg"),
-                    editable=True,
-                    version=m.group("version"),
-                    path=m2.group("path"),
-                )
-            )
-        elif line.find(" @ ") != -1:
-            m = re.match(rf"{pkg_name} @ (?P<path>.+)", line)
-            assert m is not None, f"`{line}`"
-            path = m.group("path")
-            assert path.startswith("file:///"), path
-            path = path[7:]
-            if path.find("-") != -1:
-                version = Path(path).name.split("-")[1]
-            else:
-                if len(managers) == 0:
-                    cfg = PBTConfig(cwd=Path("/tmp"), cache_dir=Path("/tmp/cache"))
-                    managers += [Poetry(cfg), Maturin(cfg)]
-
-                for manager in managers:
-                    if manager.is_package_directory(Path(path)):
-                        version = manager.load(Path(path)).version
-                        break
-                else:
-                    raise ValueError(
-                        "Unknown package {} located at: {}".format(m.group("pkg"), path)
-                    )
-            pkgs.append(
-                PipFreezePkgInfo(
-                    name=m.group("pkg"), version=version, editable=True, path=path
-                )
-            )
-        else:
-            m = re.match(rf"{pkg_name}==(?P<version>.+)", line)
-            assert m is not None, f"`{line}`"
-            pkgs.append(
-                PipFreezePkgInfo(name=m.group("pkg"), version=m.group("version"))
-            )
-        i += 1
-
-    return sorted(pkgs, key=attrgetter("name"))
-
-
-def get_dependency(pip_file: Union[str, Path], name: str) -> Optional[PipFreezePkgInfo]:
-    deps = get_dependencies(pip_file)
-    for dep in deps:
-        if dep.name == name:
-            return dep
-    return None
 
 
 def pylib(cwd, name, version, deps=None, dev_deps=None):
