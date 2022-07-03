@@ -23,9 +23,7 @@ class PBTConfig:
     ignore_packages: Set[str] = field(default_factory=set)
     # packages that do not contain any code with sole purpose for installing dependencies or creating working environment
     phantom_packages: Set[str] = field(default_factory=set)
-    # skip building these local packages (i.e., rely on the package registry to find an installable version)
-    skip_building_packages: Set[str] = field(default_factory=set)
-    # use pre-built binaries for the package if available
+    # use pre-built binaries for the package if available (i.e., rely on the package registry to find an installable version)
     use_prebuilt_binaries: Set[str] = field(default_factory=set)
     # directory to store the built artifacts for release (relative to each package's location)
     distribution_dir: Path = Path("./dist")
@@ -76,16 +74,22 @@ class PBTConfig:
             cfg = {}
 
         logger.info("Root directory: {}", cwd)
+
+        if "python_path" not in cfg:
+            # try use python_path from the environment variable: `PBT_PYTHON`
+            python_path = os.environ.get("PBT_PYTHON", None)
+        else:
+            python_path = cfg["python_path"]
+
         return PBTConfig(
             cwd=cwd,
             cache_dir=cache_dir,
             ignore_packages=set(cfg.get("ignore_packages", [])),
             phantom_packages=set(cfg.get("phantom_packages", [])),
-            skip_building_packages=set(cfg.get("skip_building_packages", [])),
             use_prebuilt_binaries=set(cfg.get("use_prebuilt_binaries", True)),
             distribution_dir=Path(cfg.get("distribution_dir", "./dist")),
             python_virtualenvs_path=cfg.get("python_virtualenvs_path", "./.venv"),
-            python_path=Path(cfg.get("python_path", None)),
+            python_path=Path(python_path) if python_path is not None else None,
         )
 
     def pkg_cache_dir(self, pkg: Package) -> Path:

@@ -159,7 +159,7 @@ class BTPipeline:
                     and (
                         dep.name in pkg.dependencies or dep.name in pkg.dev_dependencies
                     )
-                    and (dep.name not in self.cfg.skip_building_packages)
+                    and (dep.name not in self.cfg.use_prebuilt_binaries)
                 ]
                 additional_deps = {
                     dep.name: next(iter(dep.invert_dependencies.values()))
