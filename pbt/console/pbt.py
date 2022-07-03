@@ -7,6 +7,7 @@ from loguru import logger
 from pbt.config import PBTConfig
 from pbt.package.manager.poetry import Poetry
 from pbt.package.manager.maturin import Maturin
+from pbt.package.manager.python import PythonPkgManager
 from pbt.package.package import PackageType
 from pbt.package.pipeline import BTPipeline, VersionConsistent
 from pbt.package.registry.pypi import PyPI
@@ -17,10 +18,15 @@ def init(
     cwd: str, packages: List[str], verbose: bool
 ) -> Tuple[BTPipeline, PBTConfig, List[str]]:
     cfg = PBTConfig.from_dir(cwd)
-    managers: Dict[PackageType, PkgManager] = {}
-    managers[PackageType.Poetry] = Poetry(cfg, managers)
-    managers[PackageType.Maturin] = Maturin(cfg, managers)
-    pl = BTPipeline(cfg.cwd, managers=managers)
+    managers: Dict[PackageType, PkgManager] = {
+        PackageType.Poetry: Poetry(cfg),
+        PackageType.Maturin: Maturin(cfg),
+    }
+    for k, v in managers.items():
+        if isinstance(v, PythonPkgManager):
+            v.set_package_managers(managers)
+
+    pl = BTPipeline(cfg, managers=managers)
     pl.discover()
 
     if len(packages) == 0:
