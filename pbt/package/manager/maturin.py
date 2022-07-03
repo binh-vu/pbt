@@ -1,20 +1,16 @@
-from dataclasses import dataclass
-import os, glob
-from operator import attrgetter
-from pathlib import Path
-import shutil
+import os
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union, cast
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 from loguru import logger
-from pbt.package.manager.python import Pep518PkgManager, PythonPkgManager,
-from pbt.package.package import DepConstraint
 from pbt.config import PBTConfig
-from pbt.diff import Diff, diff_db
-from pbt.misc import exec
-from pbt.package.manager.manager import DepConstraints, PkgManager, build_cache
-from pbt.package.package import Package, PackageType
-from tomlkit.api import document, dumps, inline_table, loads, nl, table, array
+from pbt.misc import NewEnvVar, exec
+from pbt.package.manager.manager import DepConstraints
+from pbt.package.manager.python import Pep518PkgManager
+from pbt.package.package import DepConstraint, Package, PackageType
+from tomlkit.api import array, document, dumps, inline_table, loads, nl, table
 
 if TYPE_CHECKING:
     from pbt.package.manager.poetry import Poetry
@@ -29,7 +25,7 @@ class MaturinPackage(Package):
 
 class Maturin(Pep518PkgManager):
     def __init__(self, cfg: PBTConfig) -> None:
-        super().__init__(cfg, backend="maturin")
+        super().__init__(cfg, pkg_type=PackageType.Maturin, backend="maturin")
 
     def load(self, dir: Path) -> MaturinPackage:
         try:
@@ -165,66 +161,17 @@ class Maturin(Pep518PkgManager):
         return version_spec.to_pep508_string()
 
     def clean(self, pkg: Package):
+        super().clean(pkg)
         # run cargo clean to clean up rust build artifacts
         exec(
             "cargo clean",
             cwd=pkg.location,
-            check_returncode=True,
-            **self.exec_options("clean"),
+            env=self.passthrough_envs,
         )
-        shutil.rmtree(pkg.location / "dist", ignore_errors=True)
-
-    def publish(self, pkg: Package):
-        exec(
-            "maturin publish -r",
-            cwd=pkg.location,
-            check_returncode=True,
-            **self.exec_options("publish"),
-        )
-
-    def install_dependency(
-        self,
-        pkg: Package,
-        dependency: Package,
-        editable: bool = False,
-        skip_dep_deps: Optional[List[str]] = None,
-    ):
-        assert dependency.name not in self.cfg.phantom_packages, dependency.name
-        skip_dep_deps = skip_dep_deps or []
-
-        # load pip_path outside of mask_file as without pyproject.toml, it is not a poetry package
-        # and we may get pip path from the wrong environment
-        pip_path = self.pip_path(pkg)
-        exec([pip_path, "uninstall", "-y", dependency.name])
-
-        dep_manager = self.managers[dependency.type]
-        if editable:
-            if dependency.type == PackageType.Poetry:
-                manager = cast("Poetry", dep_manager)
-                manager.create_setup_py(dependency, skip_deps=skip_dep_deps)
-                with manager.mask_file(dependency.location / "pyproject.toml"):
-                    exec([pip_path, "install", "-e", "."], cwd=dependency.location)
-                (dependency.location / "setup.py").unlink()  # remove the setup.py file
-            if dependency.type == PackageType.Maturin:
-                manager = cast("Maturin", dep_manager)
-                manager.install(
-                    cast("MaturinPackage", dependency),
-                    editable=editable,
-                    skip_deps=skip_dep_deps,
-                    virtualenv=self.venv_path(pkg.name, pkg.location),
-                )
-            else:
-                raise NotImplementedError(type(dep_manager))
-        else:
-            dep_manager.build(dependency, skip_deps=skip_dep_deps)
-            whl_path = self.wheel_path(dependency)
-            assert whl_path is not None
-            exec([pip_path, "install", whl_path])
 
     def install(
         self,
         pkg: MaturinPackage,
-        editable: bool = False,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
         additional_deps: Optional[Dict[str, DepConstraints]] = None,
@@ -236,72 +183,31 @@ class Maturin(Pep518PkgManager):
         if include_dev and pkg.optional_dep_name is not None:
             options += " --extras=" + pkg.optional_dep_name
 
-        exc_options = self.exec_options("install")
         if virtualenv is None:
             virtualenv = self.venv_path(pkg.name, pkg.location)
 
         # set the virtual environment which the package will be installed to
-        if "env" not in exc_options:
-            exc_options["env"] = {"VIRTUAL_ENV": str(virtualenv)}
-        elif isinstance(exc_options["env"], list):
-            exc_options["env"].append({"name": "VIRTUAL_ENV", "value": str(virtualenv)})
-        else:
-            exc_options["env"]["VIRTUAL_ENV"] = str(virtualenv)
+        env: List[Union[str, NewEnvVar]] = [
+            x for x in self.passthrough_envs if x != "PATH"
+        ]
+        for k, v in self.get_virtualenv_environment_variables(virtualenv).items():
+            env.append({"name": k, "value": v})
 
-        if editable:
-            with self.mask_dependencies(pkg, skip_deps, additional_deps):
-                exec(f"maturin develop -r {options}", cwd=pkg.location, **exc_options)
-        else:
-            with self.mask_dependencies(pkg, skip_deps, additional_deps):
-                exec(f"maturin build -r", cwd=pkg.location, **exc_options)
-                exec(
-                    f"pip install {self.wheel_path(pkg)}",
-                    cwd=pkg.location,
-                    **exc_options,
-                )
+        with self.change_dependencies(pkg, skip_deps, additional_deps):
+            exec(f"maturin develop -r {options}", cwd=pkg.location, env=env)
 
-    def build(
-        self,
-        pkg: Package,
-        skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
-        clean_dist: bool = True,
-    ):
-        """Build the package. Support ignoring some dependencies to avoid installing and solving
-        dependencies multiple times (not in the super interface as compiled languages will complain).
-        """
-        with build_cache() as built_pkgs:
-            skip_deps = skip_deps or []
-            additional_deps = additional_deps or {}
-
-            build_ident = (pkg.name, pkg.version)
-            build_opts = (tuple(skip_deps), tuple(sorted(additional_deps.keys())))
-            if built_pkgs.get(build_ident, None) == build_opts:
-                return
-
-            with diff_db(pkg, self.cfg) as db:
-                with self.mask_dependencies(pkg, skip_deps, additional_deps):
-                    diff = Diff.from_local(db, self, pkg)
-                    if (
-                        self.wheel_path(pkg) is not None
-                        and self.tar_path(pkg) is not None
-                    ):
-                        if not diff.is_modified(db):
-                            built_pkgs[build_ident] = build_opts
-                            return
-
-                    try:
-                        if clean_dist and (pkg.location / "dist").exists():
-                            shutil.rmtree(str(pkg.location / "dist"))
-                        exec(
-                            "maturin build -r -o dist",
-                            cwd=pkg.location,
-                            **self.exec_options("build"),
-                        )
-                    finally:
-                        diff.save(db)
-
-                    built_pkgs[build_ident] = build_opts
+    def _build_command(self, pkg: Package, release: bool):
+        exec(
+            [
+                "maturin",
+                "build",
+                "-r",
+                "-o",
+                (pkg.location / self.cfg.distribution_dir).absolute(),
+            ],
+            cwd=pkg.location,
+            env=self.passthrough_envs,
+        )
 
     def get_optional_dependency_name(self, doc: dict) -> Optional[str]:
         """Get the name of the optional dependency (i.e., extras) in the pyproject.toml."""
@@ -316,14 +222,8 @@ class Maturin(Pep518PkgManager):
 
         return None
 
-    def exec_options(
-        self,
-        cmd: Literal["publish", "install", "build", "clean", "env.create"],
-    ) -> dict:
-        return {"env": ["PATH", "CC", "CXX"]}
-
     @contextmanager  # type: ignore
-    def mask_dependencies(
+    def change_dependencies(
         self,
         pkg: Package,
         skip_deps: List[str],
@@ -403,17 +303,3 @@ class Maturin(Pep518PkgManager):
                 self.cfg.pkg_cache_dir(pkg) / "pyproject.toml",
                 pkg.location / "pyproject.toml",
             )
-
-    @contextmanager  # type: ignore
-    def mask_file(
-        self,
-        file_path: Union[str, Path],
-    ):
-        """Temporary mask out a file"""
-        file_path = str(file_path)
-        assert os.path.isfile(file_path)
-        try:
-            os.rename(file_path, file_path + ".tmp")
-            yield None
-        finally:
-            os.rename(file_path + ".tmp", file_path)

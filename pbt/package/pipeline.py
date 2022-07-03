@@ -135,13 +135,12 @@ class BTPipeline:
         self,
         pkg_names: List[str],
         include_dev: bool = False,
-        editable: bool = False,
     ):
         """Install packages
 
         Args:
             pkg_names: name of packages to install
-            editable: whether to install those packages in editable mode
+            include_dev: whether to install development dependencies
         """
         pkgs = [self.pkgs[name] for name in pkg_names]
 
@@ -173,7 +172,6 @@ class BTPipeline:
                     include_dev=include_dev,
                     skip_deps=skip_deps,
                     additional_deps=additional_deps,
-                    editable=editable,
                 )
 
                 for dep in deps:
@@ -183,7 +181,7 @@ class BTPipeline:
                             dep.dev_dependencies.keys()
                         )
                         manager.install_dependency(
-                            pkg, dep, editable=editable, skip_dep_deps=skip_dep_deps
+                            pkg, dep, skip_dep_deps=skip_dep_deps
                         )
 
     def publish(self, pkg_names: List[str], registries: Dict[PackageType, PkgRegistry]):

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Union, cast
 import pytest
 from loguru import logger
 from pbt.config import PBTConfig
+from pbt.package.manager.maturin import Maturin
 from pbt.vcs.git import Git
 from pbt.package import manager
 from pbt.package.registry.pypi import PyPI
@@ -84,6 +85,8 @@ def setup_dir(dir: Directory, cwd: Union[Path, str]):
 def get_dependencies(pip_file: Union[str, Path]) -> List[PipFreezePkgInfo]:
     lines = exec([pip_file, "freeze"])
 
+    managers: List[PkgManager] = []
+
     pkg_name = r"(?P<pkg>[a-zA-Z0-9-_]+)"
     pkgs = []
     i = 0
@@ -112,9 +115,27 @@ def get_dependencies(pip_file: Union[str, Path]) -> List[PipFreezePkgInfo]:
             m = re.match(rf"{pkg_name} @ (?P<path>.+)", line)
             assert m is not None, f"`{line}`"
             path = m.group("path")
-            version = Path(path).name.split("-")[1]
+            assert path.startswith("file:///"), path
+            path = path[7:]
+            if path.find("-") != -1:
+                version = Path(path).name.split("-")[1]
+            else:
+                if len(managers) == 0:
+                    cfg = PBTConfig(cwd=Path("/tmp"), cache_dir=Path("/tmp/cache"))
+                    managers += [Poetry(cfg), Maturin(cfg)]
+
+                for manager in managers:
+                    if manager.is_package_directory(Path(path)):
+                        version = manager.load(Path(path)).version
+                        break
+                else:
+                    raise ValueError(
+                        "Unknown package {} located at: {}".format(m.group("pkg"), path)
+                    )
             pkgs.append(
-                PipFreezePkgInfo(name=m.group("pkg"), version=version, path=path)
+                PipFreezePkgInfo(
+                    name=m.group("pkg"), version=version, editable=True, path=path
+                )
             )
         else:
             m = re.match(rf"{pkg_name}==(?P<version>.+)", line)
