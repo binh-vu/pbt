@@ -170,10 +170,10 @@ class BTPipeline:
                 logger.info("Installing package: {}", pkg.name)
                 manager.install(
                     pkg,
-                    editable=editable,
                     include_dev=include_dev,
                     skip_deps=skip_deps,
                     additional_deps=additional_deps,
+                    editable=editable,
                 )
 
                 for dep in deps:

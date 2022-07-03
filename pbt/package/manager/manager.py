@@ -1,23 +1,22 @@
 import glob
-from marshal import version
 import os
 import re
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from email.generator import Generator
-from functools import lru_cache
-from operator import attrgetter, itemgetter
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
 import semver
 from pbt.config import PBTConfig
-from pbt.misc import cache_func
+from pbt.misc import cache_method
 from pbt.package.package import DepConstraint, DepConstraints, Package, VersionSpec
 
 
 class PkgManager(ABC):
-    """A package manager that is responsible for all tasks related to packages such as dicovering, parsing, installing and publishing."""
+    """A package manager that is responsible for all tasks related to packages such as dicovering, parsing, building, installing, and publishing."""
+
+    def __init__(self, cfg: PBTConfig) -> None:
+        self.cfg = cfg
 
     @abstractmethod
     def is_package_directory(self, dir: Path) -> bool:
@@ -83,12 +82,18 @@ class PkgManager(ABC):
         self,
         package: Package,
         skip_deps: Optional[List[str]] = None,
+        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        release: bool = True,
+        clean_dist: bool = True,
     ):
         """Build the package. If it has been built before during PBT running, we may skip the build step (i.e., caching results).
 
         Args:
             package: The package to build
             skip_deps: The optional list of dependencies to skip
+            additional_deps: additional dependencies to add to the build
+            release: whether to build in release mode
+            clean_dist: Whether to clean the dist directory before building
         """
         raise NotImplementedError()
 
@@ -97,7 +102,6 @@ class PkgManager(ABC):
         self,
         package: Package,
         dependency: Package,
-        editable: bool = False,
         skip_dep_deps: Optional[List[str]] = None,
     ):
         """Install the given dependency for the given package.
@@ -105,13 +109,12 @@ class PkgManager(ABC):
         The dependency must not be the phantom package as it does not containing any code to build or install.
 
         Note: don't expect this function will be able to find the local dependencies in the project
-        as the manager relies on a package registry. For local dependencies, add them to `skip_deps` anddd use `install_dependency` to install them
-        separately instead. Otherwise, you may get an error.
+        as the manager relies on a package registry. For local dependencies, add them to `skip_deps` and use `install_dependency` to install them
+        separately instead. Otherwise, you may get an error or the local dependencies from the package registry (the content may be different from the current ones on disk).
 
         Args:
             package: The package to install the dependency for
             dependency: The dependency to install
-            editable: Whether the dependency is editable (auto-reload)
             skip_dep_deps: The dependencies of the dependency to skip. This option is not guaranteed to compiled language
         """
         raise NotImplementedError()
@@ -120,7 +123,6 @@ class PkgManager(ABC):
     def install(
         self,
         package: Package,
-        editable: bool = False,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
         additional_deps: Optional[Dict[str, DepConstraints]] = None,
@@ -128,12 +130,11 @@ class PkgManager(ABC):
         """Install the package, assuming the the specification is updated. Note that if the package is phantom, only the dependencies are installed.
 
         Note: don't expect this function will be able to find the local dependencies in the project
-        as the manager relies on a package registry. For local dependencies, add them to `skip_deps` anddd use `install_dependency` to install them
+        as the manager relies on a package registry. For local dependencies, add them to `skip_deps` and use `install_dependency` to install them
         separately instead. Otherwise, you may get an error.
 
         Args:
             package: The package to install
-            editable: Whether the package is editable (auto-reload)
             include_dev: Whether to install dev dependencies
             skip_deps: The dependencies to skip (usually the local ones we want to install in editable mode separately). This option is not guaranteed to compiled language
             additional_deps: The additional dependencies to install
@@ -141,11 +142,13 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def compute_pkg_hash(self, pkg: Package) -> str:
+    def compute_pkg_hash(self, pkg: Package, target: Optional[str] = None) -> str:
         """Compute hash of package's content.
 
         Args:
             pkg: The package to compute the hash for
+            target: (optional) a specific target that this package is built for. The format and value depends on the kind of package.
+                For example, in Python it is: `(-{build tag})?-{python tag}-{abi tag}-{platform tag}.whl` (pep-491)
         """
         raise NotImplementedError()
 
@@ -153,6 +156,24 @@ class PkgManager(ABC):
     def get_fixed_version_pkgs(self) -> Set[str]:
         """Get set of packages which versions are fixed and never should updated."""
         raise NotImplementedError()
+
+    @contextmanager  # type: ignore
+    def mask_file(
+        self,
+        file_path: Union[str, Path],
+    ):
+        """Temporary mask out a file
+
+        Arguments:
+            file_path: The path to the file to mask
+        """
+        file_path = str(file_path)
+        assert os.path.isfile(file_path)
+        try:
+            os.rename(file_path, file_path + ".tmp")
+            yield None
+        finally:
+            os.rename(file_path + ".tmp", file_path)
 
     def filter_included_files(self, pkg: Package, files: List[str]) -> List[str]:
         """Filter out the files that are not included in the package, these are files that
@@ -261,10 +282,9 @@ class PkgManager(ABC):
         """
         return self.parse_version_spec(version_spec).is_version_compatible(version)
 
-    @classmethod
-    @cache_func()
+    @cache_method()
     def parse_version_spec(
-        cls,
+        self,
         rule: str,
     ) -> VersionSpec:
         """Parse the given version rule to get lowerbound and upperbound (exclusive)
@@ -288,7 +308,7 @@ class PkgManager(ABC):
         if op1 == "":
             op1 = "=="
 
-        lowerbound = cls.parse_version(version1)
+        lowerbound = self.parse_version(version1)
         if op1 == "^":
             assert version2 is None
             # special case for 0 following the nodejs way (I can't believe why)
@@ -329,7 +349,7 @@ class PkgManager(ABC):
                 is_upperbound_inclusive=True,
             )
         else:
-            upperbound = cls.parse_version(version2) if version2 is not None else None
+            upperbound = self.parse_version(version2) if version2 is not None else None
             if op1 == "<" or op1 == "<=":
                 op1, op2 = op2, op1
                 lowerbound, upperbound = upperbound, lowerbound
@@ -359,9 +379,8 @@ class PkgManager(ABC):
         groups = m.groups()
         return f"{groups[0]}{str(version)}"
 
-    @classmethod
-    @cache_func()
-    def parse_version(cls, version: str) -> semver.VersionInfo:
+    @cache_method()
+    def parse_version(self, version: str) -> semver.VersionInfo:
         m = re.match(
             r"^(?P<major>\d+)(?P<minor>\.\d+)?(?P<patch>\.\d+)?(?P<rest>[^\d].*)?$",
             version,

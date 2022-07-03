@@ -21,13 +21,9 @@ def test_exec():
         cfg = PBTConfig(
             cwd=tmpdir,
             cache_dir=tmpdir / ".cache",
-            ignore_packages=set(),
-            phantom_packages=set(),
         )
 
-        managers: Dict[PackageType, PkgManager] = {}
-        managers[PackageType.Poetry] = Poetry(cfg, managers)
-        poetry = cast(Poetry, managers[PackageType.Poetry])
+        poetry = Poetry(cfg)
 
         pkg = Package(
             name="test",

@@ -180,15 +180,11 @@ def publish(package: List[str], cwd: str = ".", verbose: bool = False):
     is_flag=True,
     help="increase verbosity",
 )
-def create_setuppy(package: List[str], cwd: str = ".", verbose: bool = False):
-    """Create setup.py file of a python package"""
+def build(package: List[str], cwd: str = ".", verbose: bool = False):
+    """Build packages"""
     pl, cfg, pkgs = init(cwd, package, verbose)
-
     with build_cache():
         for pkg_name in pkgs:
             pkg = pl.pkgs[pkg_name]
             manager = pl.managers[pkg.type]
-            assert isinstance(
-                manager, Poetry
-            ), "Only create setup.py for Poetry packages"
-            manager.create_setup_py(pkg)
+            manager.build(pkg)

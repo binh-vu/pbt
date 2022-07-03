@@ -1,13 +1,9 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Dict, cast
 
-from click import edit
 import glob
 from pbt.config import PBTConfig
-from pbt.package.manager.manager import PkgManager
 from pbt.package.manager.poetry import Poetry
-from pbt.package.package import PackageType
 from tests.conftest import (
     PipFreezePkgInfo,
     Repo,
@@ -18,16 +14,11 @@ from tests.conftest import (
 
 def test_env_path(repo1):
     lib0 = repo1.packages["lib0"]
-
-    managers: Dict[PackageType, PkgManager] = {}
-    managers[PackageType.Poetry] = Poetry(repo1.cfg, managers)
-    poetry = cast(Poetry, managers[PackageType.Poetry])
+    poetry = Poetry(repo1.cfg)
 
     pippath = poetry.pip_path(lib0)
     pythonpath = poetry.pip_path(lib0)
 
-    assert pippath.parent.parent.name.startswith(lib0.name)
-    assert pythonpath.parent.parent.name.startswith(lib0.name)
     assert pippath.exists()
     assert pythonpath.exists()
 
@@ -77,24 +68,24 @@ def test_install_dependency(repo2: Repo):
     # install lib1 should not install lib0 if skipping dependencies is set.
     repo2.poetry.install_dependency(lib2, lib1, skip_dep_deps=[lib0.name])
     assert get_dependencies(repo2.poetry.pip_path(lib2)) == [
-        PipFreezePkgInfo(lib1.name, editable=False, version=lib1.version)
+        PipFreezePkgInfo(lib1.name, editable=True, version=lib1.version)
     ]
 
-    repo2.poetry.install_dependency(
-        lib3, lib1, editable=True, skip_dep_deps=[lib0.name]
-    )
+    repo2.poetry.install_dependency(lib3, lib1, skip_dep_deps=[lib0.name])
     assert get_dependencies(repo2.poetry.pip_path(lib3)) == [
         PipFreezePkgInfo(lib1.name, editable=True, version=lib1.version)
     ]
 
     # install lib1 should also install lib0 if no skipping dependencies
+    # note that lib0 is installed from PyPI so it is not editable.
     repo2.poetry.install_dependency(lib4, lib1)
     assert get_dependencies(repo2.poetry.pip_path(lib4)) == [
         PipFreezePkgInfo(lib0.name, editable=False, version=lib0_latest_pypi),
-        PipFreezePkgInfo(lib1.name, editable=False, version=lib1.version),
+        PipFreezePkgInfo(lib1.name, editable=True, version=lib1.version),
     ]
 
-    repo2.poetry.install_dependency(lib5, lib1, editable=True)
+    # similarly, lib0 is installed from PyPI
+    repo2.poetry.install_dependency(lib5, lib1)
     assert get_dependencies(repo2.poetry.pip_path(lib5)) == [
         PipFreezePkgInfo(lib0.name, editable=False, version=lib0_latest_pypi),
         PipFreezePkgInfo(lib1.name, editable=True, version=lib1.version),
@@ -113,9 +104,7 @@ def test_save():
             phantom_packages=set(),
         )
 
-        managers: Dict[PackageType, PkgManager] = {}
-        managers[PackageType.Poetry] = Poetry(cfg, managers)
-        poetry = cast(Poetry, managers[PackageType.Poetry])
+        poetry = Poetry(cfg)
 
         lib = pylib(
             tmpdir,

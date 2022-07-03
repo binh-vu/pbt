@@ -1,12 +1,12 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Set, Union
+from typing import Optional, Set, Union
 from loguru import logger
 
 import orjson
 from pbt.package.package import Package
-from pbt.misc import exec
+from pbt.misc import cache_method, exec
 
 
 PBT_CONFIG_FILE_NAME = "pbtconfig.json"
@@ -16,10 +16,20 @@ PBT_LOCK_FILE_NAME = "pbt.lock"
 @dataclass
 class PBTConfig:
     cwd: Path
+    # directory
     cache_dir: Path
-    ignore_packages: Set[str]
+    # set of packages that we ignore
+    ignore_packages: Set[str] = field(default_factory=set)
     # packages that do not contain any code with sole purpose for installing dependencies or creating working environment
-    phantom_packages: Set[str]
+    phantom_packages: Set[str] = field(default_factory=set)
+    # use pre-built binaries for the package if available
+    use_prebuilt_binaries: Set[str] = field(default_factory=set)
+    # directory to store the built artifacts for release (relative to each package's location)
+    distribution_dir: Path = Path("./dist")
+    # the virtualenv directory (default is .venv in the project root directory)
+    python_virtualenvs_path: str = "./.venv"
+    # python executable to use for building and installing packages, default (None) is the first one on PATH
+    python_path: Optional[Path] = None
 
     @staticmethod
     def from_dir(cwd: Union[Path, str]) -> "PBTConfig":
@@ -65,9 +75,13 @@ class PBTConfig:
         logger.info("Root directory: {}", cwd)
         return PBTConfig(
             cwd=cwd,
+            cache_dir=cache_dir,
             ignore_packages=set(cfg.get("ignore_packages", [])),
             phantom_packages=set(cfg.get("phantom_packages", [])),
-            cache_dir=cache_dir,
+            use_prebuilt_binaries=set(cfg.get("use_prebuilt_binaries", True)),
+            distribution_dir=Path(cfg.get("distribution_dir", "./dist")),
+            python_virtualenvs_path=cfg.get("python_virtualenvs_path", "./.venv"),
+            python_path=Path(cfg.get("python_path", None)),
         )
 
     def pkg_cache_dir(self, pkg: Package) -> Path:
@@ -77,3 +91,12 @@ class PBTConfig:
         pkg_dir = self.cache_dir / pkg.name
         pkg_dir.mkdir(exist_ok=True, parents=True)
         return pkg_dir
+
+    @cache_method()
+    def get_python_path(self) -> str:
+        if self.python_path is not None:
+            if not self.python_path.exists():
+                raise ValueError("Python does not exist: {}".format(self.python_path))
+            return str(self.python_path)
+        else:
+            return "python"
