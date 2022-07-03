@@ -1,4 +1,7 @@
+from pathlib import Path
+from pbt.config import PBTConfig
 from pbt.package.manager.manager import PkgManager, build_cache
+from pbt.package.manager.poetry import Poetry
 from pbt.package.package import VersionSpec
 from semver import VersionInfo
 
@@ -22,14 +25,13 @@ def test_build_cache():
 
 
 def test_parse_version_spec():
-    manager = PkgManager(None)
-    vs = manager.parse_version_spec(">=2.0.0-alpha.15")
+    vs = PkgManager.parse_version_spec(">=2.0.0-alpha.15")
     assert vs == VersionSpec(VersionInfo.parse("2.0.0-alpha.15"), None, True, False)
 
-    vs = manager.parse_version_spec(">2.0.0-alpha.15")
+    vs = PkgManager.parse_version_spec(">2.0.0-alpha.15")
     assert vs == VersionSpec(VersionInfo.parse("2.0.0-alpha.15"), None, False, False)
 
-    vs = manager.parse_version_spec(">2.0.0-alpha.15, <=5.2.1")
+    vs = PkgManager.parse_version_spec(">2.0.0-alpha.15, <=5.2.1")
     assert vs == VersionSpec(
         VersionInfo.parse("2.0.0-alpha.15"), VersionInfo.parse("5.2.1"), False, True
     )

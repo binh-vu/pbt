@@ -8,7 +8,7 @@ from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
 import semver
 from pbt.config import PBTConfig
-from pbt.misc import cache_method
+from pbt.misc import cache_func, cache_method
 from pbt.package.package import DepConstraint, DepConstraints, Package, VersionSpec
 
 
@@ -282,9 +282,10 @@ class PkgManager(ABC):
         """
         return self.parse_version_spec(version_spec).is_version_compatible(version)
 
-    @cache_method()
+    @classmethod
+    @cache_func()
     def parse_version_spec(
-        self,
+        cls,
         rule: str,
     ) -> VersionSpec:
         """Parse the given version rule to get lowerbound and upperbound (exclusive)
@@ -308,7 +309,7 @@ class PkgManager(ABC):
         if op1 == "":
             op1 = "=="
 
-        lowerbound = self.parse_version(version1)
+        lowerbound = cls.parse_version(version1)
         if op1 == "^":
             assert version2 is None
             # special case for 0 following the nodejs way (I can't believe why)
@@ -349,7 +350,7 @@ class PkgManager(ABC):
                 is_upperbound_inclusive=True,
             )
         else:
-            upperbound = self.parse_version(version2) if version2 is not None else None
+            upperbound = cls.parse_version(version2) if version2 is not None else None
             if op1 == "<" or op1 == "<=":
                 op1, op2 = op2, op1
                 lowerbound, upperbound = upperbound, lowerbound
@@ -379,8 +380,9 @@ class PkgManager(ABC):
         groups = m.groups()
         return f"{groups[0]}{str(version)}"
 
-    @cache_method()
-    def parse_version(self, version: str) -> semver.VersionInfo:
+    @classmethod
+    @cache_func()
+    def parse_version(cls, version: str) -> semver.VersionInfo:
         m = re.match(
             r"^(?P<major>\d+)(?P<minor>\.\d+)?(?P<patch>\.\d+)?(?P<rest>[^\d].*)?$",
             version,

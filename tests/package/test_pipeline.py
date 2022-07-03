@@ -15,7 +15,7 @@ def test_discover(repo1: Repo):
     assert pl.pkgs == repo1.packages
 
 
-def test_install(repo1: Repo):
+def test_python_install(repo1: Repo):
     lib0 = repo1.packages["lib0"]
     lib1 = repo1.packages["lib1"]
     lib2 = repo1.packages["lib2"]
@@ -27,39 +27,8 @@ def test_install(repo1: Repo):
     pl.discover()
 
     assert get_dependencies(poetry.pip_path(lib2)) == []
-    pl.install([lib2.name], editable=False)
-    assert get_dependencies(poetry.pip_path(lib2)) == [
-        PipFreezePkgInfo(name=lib0.name, editable=False, version="0.5.1"),
-        PipFreezePkgInfo(name=lib1.name, editable=False, version="0.2.1"),
-        PipFreezePkgInfo(name=lib2.name, editable=False, version="0.6.7"),
-    ]
+    pl.install([lib2.name])
 
-    assert exec(f"{python} -m {lib0.name}")[0] == lib0.name
-
-    # make some changes and get it build correctly
-    setup_dir({"lib0": {"__main__.py": "print('lib0 - update 1')"}}, lib0.location)
-    assert (
-        exec(f"{python} -m {lib0.name}")[0] == lib0.name
-    ), "Change should not be reflected immediately before we build again"
-
-    pl.install([lib2.name], editable=False)
-    # now we should see the changes
-    assert exec(f"{python} -m {lib0.name}")[0] == "lib0 - update 1"
-
-
-def test_install_editable(repo1: Repo):
-    lib0 = repo1.packages["lib0"]
-    lib1 = repo1.packages["lib1"]
-    lib2 = repo1.packages["lib2"]
-
-    poetry = repo1.poetry
-    python = poetry.python_path(lib2)
-
-    pl = BTPipeline(repo1.cfg.cwd, managers={PackageType.Poetry: poetry})
-    pl.discover()
-
-    assert get_dependencies(poetry.pip_path(lib2)) == []
-    pl.install([lib2.name], editable=True)
     assert get_dependencies(poetry.pip_path(lib2)) == [
         PipFreezePkgInfo(name=lib0.name, editable=True, version="0.5.1"),
         PipFreezePkgInfo(name=lib1.name, editable=True, version="0.2.1"),
