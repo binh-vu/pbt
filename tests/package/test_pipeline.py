@@ -8,7 +8,7 @@ from pbt.misc import exec
 
 
 def test_discover(repo1: Repo):
-    pl = BTPipeline(repo1.cfg.cwd, managers={PackageType.Poetry: repo1.poetry})
+    pl = BTPipeline(repo1.cfg, managers={PackageType.Poetry: repo1.poetry})
 
     assert pl.pkgs == {}
     pl.discover()
@@ -23,7 +23,7 @@ def test_python_install(repo1: Repo):
     poetry = repo1.poetry
     python = poetry.python_path(lib2)
 
-    pl = BTPipeline(repo1.cfg.cwd, managers={PackageType.Poetry: poetry})
+    pl = BTPipeline(repo1.cfg, managers={PackageType.Poetry: poetry})
     pl.discover()
 
     assert get_dependencies(poetry.pip_path(lib2)) == []
@@ -48,7 +48,7 @@ def test_enforce_version_consistency(repo1: Repo):
     lib2 = repo1.packages["lib2"]
     lib3 = repo1.packages["lib3"]
 
-    pl = BTPipeline(repo1.cfg.cwd, managers={PackageType.Poetry: repo1.poetry})
+    pl = BTPipeline(repo1.cfg, managers={PackageType.Poetry: repo1.poetry})
 
     # first update doesn't change anything
     pl.discover()
@@ -111,7 +111,7 @@ def test_enforce_version_consistency(repo1: Repo):
 
 
 def test_publish(repo1: Repo, mockup_pypi: PkgRegistry, mocker: MockerFixture):
-    pl = BTPipeline(repo1.cfg.cwd, managers={PackageType.Poetry: repo1.poetry})
+    pl = BTPipeline(repo1.cfg, managers={PackageType.Poetry: repo1.poetry})
     registries = {PackageType.Poetry: mockup_pypi}
     pl.discover()
 

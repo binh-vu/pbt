@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
+from pbt.config import PBTConfig
 from pbt.diff import RemoteDiff
 from pbt.package.graph import PkgGraph, ThirdPartyPackage
 from pbt.package.manager.manager import PkgManager, build_cache
@@ -29,8 +30,9 @@ class VersionConsistent(enum.Enum):
 
 
 class BTPipeline:
-    def __init__(self, root: Path, managers: Dict[PackageType, PkgManager]) -> None:
-        self.root = root
+    def __init__(self, cfg: PBTConfig, managers: Dict[PackageType, PkgManager]) -> None:
+        self.root = cfg.cwd
+        self.cfg = cfg
         self.managers = managers
         self.graph = PkgGraph()
         self.pkgs: Dict[str, Package] = {}
@@ -157,6 +159,7 @@ class BTPipeline:
                     and (
                         dep.name in pkg.dependencies or dep.name in pkg.dev_dependencies
                     )
+                    and (dep.name not in self.cfg.skip_building_packages)
                 ]
                 additional_deps = {
                     dep.name: next(iter(dep.invert_dependencies.values()))

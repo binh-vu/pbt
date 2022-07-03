@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Set, Union
+from typing import List, Optional, Set, Union
 from loguru import logger
 
 import orjson
@@ -15,6 +15,7 @@ PBT_LOCK_FILE_NAME = "pbt.lock"
 
 @dataclass
 class PBTConfig:
+    # current working directory
     cwd: Path
     # directory
     cache_dir: Path
@@ -22,6 +23,8 @@ class PBTConfig:
     ignore_packages: Set[str] = field(default_factory=set)
     # packages that do not contain any code with sole purpose for installing dependencies or creating working environment
     phantom_packages: Set[str] = field(default_factory=set)
+    # skip building these local packages (i.e., rely on the package registry to find an installable version)
+    skip_building_packages: Set[str] = field(default_factory=set)
     # use pre-built binaries for the package if available
     use_prebuilt_binaries: Set[str] = field(default_factory=set)
     # directory to store the built artifacts for release (relative to each package's location)
@@ -78,6 +81,7 @@ class PBTConfig:
             cache_dir=cache_dir,
             ignore_packages=set(cfg.get("ignore_packages", [])),
             phantom_packages=set(cfg.get("phantom_packages", [])),
+            skip_building_packages=set(cfg.get("skip_building_packages", [])),
             use_prebuilt_binaries=set(cfg.get("use_prebuilt_binaries", True)),
             distribution_dir=Path(cfg.get("distribution_dir", "./dist")),
             python_virtualenvs_path=cfg.get("python_virtualenvs_path", "./.venv"),
