@@ -1,7 +1,7 @@
 import nox
 
 
-@nox.session(python=["3.7", "3.8", "3.9", "3.10"])
+@nox.session()
 @nox.parametrize("pip", ["22.1.2"])
 @nox.parametrize("poetry", ["1.1.13", "1.2.0b2"])
 def tests(session, pip, poetry):
