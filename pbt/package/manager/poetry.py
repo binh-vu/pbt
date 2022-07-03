@@ -172,58 +172,43 @@ class Poetry(Pep518PkgManager):
             return
 
         doc = self.parse_pyproject(poetry_file)
-        is_modified = False
 
-        if pkg.name != doc["tool"]["poetry"]["name"]:
-            doc["tool"]["poetry"]["name"] = pkg.name
-            is_modified = True
+        def update_fn(doc: dict):
+            is_modified = False
 
-        if pkg.version != doc["tool"]["poetry"]["version"]:
-            doc["tool"]["poetry"]["version"] = pkg.version
-            is_modified = True
+            if pkg.name != doc["tool"]["poetry"]["name"]:
+                doc["tool"]["poetry"]["name"] = pkg.name
+                is_modified = True
 
-        for dependencies, corr_key in [
-            (pkg.dependencies, "dependencies"),
-            (pkg.dev_dependencies, "dev-dependencies"),
-        ]:
-            dependencies: Dict[str, DepConstraints]
-            for dep, specs in dependencies.items():
-                is_dep_modified = False
-                if dep not in doc["tool"]["poetry"][corr_key]:
-                    is_dep_modified = True
-                else:
-                    other_vers = doc["tool"]["poetry"][corr_key][dep]
-                    if not isinstance(other_vers, list):
-                        other_vers = [other_vers]
-                    other_specs = [self.parse_dep_spec(v) for v in other_vers]
-                    if specs != other_specs:
+            if pkg.version != doc["tool"]["poetry"]["version"]:
+                doc["tool"]["poetry"]["version"] = pkg.version
+                is_modified = True
+
+            for dependencies, corr_key in [
+                (pkg.dependencies, "dependencies"),
+                (pkg.dev_dependencies, "dev-dependencies"),
+            ]:
+                dependencies: Dict[str, DepConstraints]
+                for dep, specs in dependencies.items():
+                    is_dep_modified = False
+                    if dep not in doc["tool"]["poetry"][corr_key]:
                         is_dep_modified = True
+                    else:
+                        other_vers = doc["tool"]["poetry"][corr_key][dep]
+                        if not isinstance(other_vers, list):
+                            other_vers = [other_vers]
+                        other_specs = [self.parse_dep_spec(v) for v in other_vers]
+                        if specs != other_specs:
+                            is_dep_modified = True
 
-                if is_dep_modified:
-                    doc["tool"]["poetry"][corr_key][dep] = self.serialize_dep_specs(
-                        specs
-                    )
-                    is_modified = True
+                    if is_dep_modified:
+                        doc["tool"]["poetry"][corr_key][dep] = self.serialize_dep_specs(
+                            specs
+                        )
+                        is_modified = True
+            return is_modified
 
-        if is_modified:
-            success = False
-            os.rename(
-                pkg.location / "pyproject.toml",
-                pkg.location / "pyproject.toml.backup",
-            )
-            try:
-                with open(poetry_file, "w") as f:
-                    f.write(dumps(doc))
-                del self.cache_pyprojects[str(poetry_file.absolute())]
-                success = True
-            finally:
-                if not success:
-                    os.rename(
-                        pkg.location / "pyproject.toml.backup",
-                        pkg.location / "pyproject.toml",
-                    )
-                else:
-                    os.remove(pkg.location / "pyproject.toml.backup")
+        self.update_pyproject(poetry_file, update_fn)
 
     def install(
         self,
