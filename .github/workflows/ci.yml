@@ -17,6 +17,9 @@ jobs:
           git config --global user.email "you@example.com" && git config --global user.name "Your Name" && git config --global init.defaultBranch master
           pip install poetry twine
           poetry install
+      - run: |
+          pip --version
+          poetry --version
       - name: run test
         run: poetry run pytest -x
       - name: build wheels

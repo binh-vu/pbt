@@ -82,7 +82,15 @@ def setup_dir(dir: Directory, cwd: Union[Path, str]):
             setup_dir(item, cwd / name)
 
 
-def get_dependencies(pip_file: Union[str, Path]) -> List[PipFreezePkgInfo]:
+def get_dependencies(
+    pip_file: Union[str, Path], ignore_editable: bool = False
+) -> List[PipFreezePkgInfo]:
+    """Get installed packages from pip freeze.
+
+    Arguments:
+        pip_file: pip executable
+        ignore_editable: whether to ignore editable detection.
+    """
     lines = exec([pip_file, "freeze"])
 
     managers: List[PkgManager] = []
