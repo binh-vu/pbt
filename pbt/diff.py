@@ -16,8 +16,8 @@ from pbt.package.manager.manager import PkgManager
 from pbt.package.package import Package
 
 # file size limit
-SOFT_SIZE_LIMIT = (1024 ** 2) * 1  # 1MB
-HARD_SIZE_LIMIT = (1024 ** 2) * 100  # 100MBs
+SOFT_SIZE_LIMIT = (1024**2) * 1  # 1MB
+HARD_SIZE_LIMIT = (1024**2) * 100  # 100MBs
 DIFF_DB_CACHE = {}
 
 
@@ -187,14 +187,14 @@ def format_size(n_bytes: int) -> str:
     if n_bytes < 1024:
         size = n_bytes
         unit = "Bs"
-    elif n_bytes >= 1024 and n_bytes < (1024 ** 2):
+    elif n_bytes >= 1024 and n_bytes < (1024**2):
         size = round(n_bytes / 1024, 2)
         unit = "KBs"
-    elif n_bytes >= (1024 ** 2) and n_bytes < (1024 ** 3):
-        size = round(n_bytes / (1024 ** 2), 2)
+    elif n_bytes >= (1024**2) and n_bytes < (1024**3):
+        size = round(n_bytes / (1024**2), 2)
         unit = "MBs"
     else:
-        assert n_bytes >= (1024 ** 3)
-        size = round(n_bytes / (1024 ** 3), 2)
+        assert n_bytes >= (1024**3)
+        size = round(n_bytes / (1024**3), 2)
         unit = "GBs"
     return f"{size}{unit}"

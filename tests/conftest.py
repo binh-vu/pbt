@@ -221,7 +221,7 @@ def make_pyrepo(cwd: Path, libs: List[Package], submodules: List[Package]):
     cache_dir = cwd / ".cache"
     cache_dir.mkdir(parents=True)
 
-    cfg = PBTConfig(cwd, cache_dir, ignore_packages=set(), phantom_packages=set())
+    cfg = PBTConfig(cwd, cache_dir)
 
     # setup project directory
     tree = {}
@@ -231,9 +231,7 @@ def make_pyrepo(cwd: Path, libs: List[Package], submodules: List[Package]):
         }
     setup_dir(tree, cwd)
 
-    managers: Dict[PackageType, PkgManager] = {}
-    managers[PackageType.Poetry] = Poetry(cfg, managers)
-    poetry = cast(Poetry, managers[PackageType.Poetry])
+    poetry = Poetry(cfg)
 
     for lib in libs:
         poetry.save(lib)

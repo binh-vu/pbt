@@ -1,46 +1,40 @@
 import re
-import glob
 import os
-import shutil
-from sys import version
-import tarfile
+import semver
 from contextlib import contextmanager
 from operator import attrgetter
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union, cast, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Union, cast
 
 from loguru import logger
 from pbt.config import PBTConfig
-from pbt.diff import Diff, diff_db
-from pbt.misc import ExecProcessError, cache_func, exec
-from pbt.package.manager.manager import PkgManager, build_cache
+from pbt.misc import ExecProcessError, NewEnvVar, cache_method, exec
+from pbt.package.manager.python import Pep518PkgManager
 from pbt.package.package import DepConstraint, DepConstraints, Package, PackageType
 from tomlkit.api import document, dumps, inline_table, loads, nl, table
 from tomlkit.items import Array, Key, KeyType, Trivia
 
-if TYPE_CHECKING:
-    from pbt.package.manager.maturin import Maturin, MaturinPackage
 
+class Poetry(Pep518PkgManager):
+    def __init__(self, cfg: PBTConfig) -> None:
+        super().__init__(
+            cfg, pkg_type=PackageType.Poetry, backend="poetry.core.masonry.api"
+        )
+        self.passthrough_envs = self.passthrough_envs + ["POETRY_VIRTUALENVS_PATH"]
 
-class Poetry(PkgManager):
-    def __init__(self, cfg: PBTConfig, managers: Dict[PackageType, PkgManager]) -> None:
-        super().__init__()
-        self.managers = managers
-        self.cfg = cfg
-        self.fixed_version_pkgs = {"python"}
-
-    def is_package_directory(self, dir: Path) -> bool:
-        if (dir / "pyproject.toml").exists():
-            return (dir / "pyproject.toml").read_text().find(
-                'build-backend = "poetry.core.masonry.api"'
-            ) != -1
-        return False
-
-    def glob_query(self, root: Path) -> str:
-        return str(root.absolute() / "**/pyproject.toml")
+    @cache_method()
+    def get_poetry_version(self, path: str) -> str:
+        """Get current poetry version"""
+        out = exec("poetry --version", env={"PATH": path})
+        m = re.match(r"^Poetry \(?version ([^)]+)\)?$", out[0].strip())
+        if m is None:
+            raise ValueError(
+                "Cannot parse Poetry version. Please report if after updating Poetry, you still encounter this error."
+            )
+        return m.group(1)
 
     @contextmanager  # type: ignore
-    def mask_dependencies(
+    def change_dependencies(
         self,
         pkg: Package,
         skip_deps: List[str],
@@ -96,41 +90,37 @@ class Poetry(PkgManager):
             )
 
     def load(self, dir: Path) -> Package:
-        poetry_file = dir / "pyproject.toml"
         try:
-            with open(poetry_file, "r") as f:
-                # just force the type to dictionary to silence the annoying type checker
-                project_cfg = cast(dict, loads(f.read()))
+            project_cfg = self.parse_pyproject(dir / "pyproject.toml")
+            name = project_cfg["tool"]["poetry"]["name"]
+            version = project_cfg["tool"]["poetry"]["version"]
 
-                name = project_cfg["tool"]["poetry"]["name"]
-                version = project_cfg["tool"]["poetry"]["version"]
+            dependencies = {}
+            dev_dependencies = {}
 
-                dependencies = {}
-                dev_dependencies = {}
-
-                for deps, cfg_key in [
-                    (dependencies, "dependencies"),
-                    (dev_dependencies, "dev-dependencies"),
-                ]:
-                    for k, vs in project_cfg["tool"]["poetry"][cfg_key].items():
-                        if not isinstance(vs, list):
-                            vs = [vs]
-                        deps[k] = sorted(
-                            (self.parse_dep_spec(v) for v in vs),
-                            key=attrgetter("constraint"),
-                        )
-
-                # see https://python-poetry.org/docs/pyproject/#include-and-exclude
-                # and https://python-poetry.org/docs/pyproject/#packages
-                include = project_cfg["tool"]["poetry"].get("include", [])
-                include.append(name)
-                for pkg_cfg in project_cfg["tool"]["poetry"].get("packages", []):
-                    include.append(
-                        os.path.join(pkg_cfg.get("from", ""), pkg_cfg["include"])
+            for deps, cfg_key in [
+                (dependencies, "dependencies"),
+                (dev_dependencies, "dev-dependencies"),
+            ]:
+                for k, vs in project_cfg["tool"]["poetry"][cfg_key].items():
+                    if not isinstance(vs, list):
+                        vs = [vs]
+                    deps[k] = sorted(
+                        (self.parse_dep_spec(v) for v in vs),
+                        key=attrgetter("constraint"),
                     )
-                include = sorted(set(include))
 
-                exclude = project_cfg["tool"]["poetry"].get("exclude", [])
+            # see https://python-poetry.org/docs/pyproject/#include-and-exclude
+            # and https://python-poetry.org/docs/pyproject/#packages
+            include = project_cfg["tool"]["poetry"].get("include", [])
+            include.append(name)
+            for pkg_cfg in project_cfg["tool"]["poetry"].get("packages", []):
+                include.append(
+                    os.path.join(pkg_cfg.get("from", ""), pkg_cfg["include"])
+                )
+            include = sorted(set(include))
+
+            exclude = project_cfg["tool"]["poetry"].get("exclude", [])
         except:
             logger.error("Error while parsing configuration in {}", dir)
             raise
@@ -235,42 +225,46 @@ class Poetry(PkgManager):
                 else:
                     os.remove(pkg.location / "pyproject.toml.backup")
 
-    def clean(self, pkg: Package):
-        exec(
-            "poetry env remove python",
-            cwd=pkg.location,
-            check_returncode=False,
-            **self.exec_options("env.remove"),
-        )
-        for eggdir in glob.glob(str(pkg.location / "*.egg-info")):
-            shutil.rmtree(eggdir)
-        shutil.rmtree(pkg.location / "dist", ignore_errors=True)
-
-    def publish(self, pkg: Package):
-        exec(
-            "poetry publish --build --no-interaction",
-            cwd=pkg.location,
-            **self.exec_options("publish"),
-        )
-
     def install(
         self,
         package: Package,
-        editable: bool = False,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
         additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        virtualenv: Optional[Path] = None,
     ):
         skip_deps = skip_deps or []
         additional_deps = additional_deps or {}
-        options = "--no-dev" if not include_dev else ""
 
-        with self.mask_dependencies(package, skip_deps, additional_deps):
+        if virtualenv is None:
+            virtualenv = self.venv_path(package.name, package.location)
+
+        path = os.environ.get("PATH", "")
+        env: List[Union[str, NewEnvVar]] = [
+            x for x in self.passthrough_envs if x != "PATH"
+        ]
+        for k, v in self.get_virtualenv_environment_variables(virtualenv).items():
+            env.append({"name": k, "value": v})
+            if k == "PATH":
+                path = v
+
+        options = ""
+        if not include_dev:
+            ver = self.parse_version(self.get_poetry_version(path))
+
+            if semver.VersionInfo(
+                major=ver.major, minor=ver.minor
+            ) < semver.VersionInfo(major=1, minor=2):
+                options = "--no-dev"
+            else:
+                options = "--only=main"
+
+        with self.change_dependencies(package, skip_deps, additional_deps):
             try:
                 exec(
                     f"poetry install {options}",
                     cwd=package.location,
-                    **self.exec_options("install"),
+                    env=env,
                 )
             except ExecProcessError as e:
                 if str(e).find(
@@ -280,254 +274,20 @@ class Poetry(PkgManager):
                     exec(
                         "poetry lock --no-update",
                         cwd=package.location,
-                        **self.exec_options("install"),
+                        env=env,
                     )
                     exec(
                         f"poetry install {options}",
                         cwd=package.location,
-                        **self.exec_options("install"),
+                        env=env,
                     )
 
-        if editable and package.name not in self.cfg.phantom_packages:
-            self.create_setup_py(package, skip_deps=skip_deps)
-            # load pip_path outside of mask_file as without pyproject.toml, it is not a poetry package
-            # and we may get pip path from the wrong environment
-            pip_path = self.pip_path(package)
-            with self.mask_file(package.location / "pyproject.toml"):
-                exec(
-                    [pip_path, "install", "-e", "."],
-                    cwd=package.location,
-                )
-            (package.location / "setup.py").unlink()  # remove the setup.py file
-
-    def build(
-        self,
-        pkg: Package,
-        skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
-    ):
-        """Build the package. Support ignoring some dependencies to avoid installing and solving
-        dependencies multiple times (not in the super interface as compiled languages will complain).
-        """
-        with build_cache() as built_pkgs:
-            skip_deps = skip_deps or []
-            additional_deps = additional_deps or {}
-
-            build_ident = (pkg.name, pkg.version)
-            build_opts = (tuple(skip_deps), tuple(sorted(additional_deps.keys())))
-            if built_pkgs.get(build_ident, None) == build_opts:
-                return
-
-            with diff_db(pkg, self.cfg) as db:
-                with self.mask_dependencies(pkg, skip_deps, additional_deps):
-                    diff = Diff.from_local(db, self, pkg)
-                    if (
-                        self.wheel_path(pkg) is not None
-                        and self.tar_path(pkg) is not None
-                    ):
-                        if not diff.is_modified(db):
-                            built_pkgs[build_ident] = build_opts
-                            return
-
-                    try:
-                        if (pkg.location / "dist").exists():
-                            shutil.rmtree(str(pkg.location / "dist"))
-                        exec(
-                            "poetry build",
-                            cwd=pkg.location,
-                            **self.exec_options("build"),
-                        )
-                    finally:
-                        diff.save(db)
-
-                    built_pkgs[build_ident] = build_opts
-
-    def build_eggfile(
-        self,
-        pkg: Package,
-        skip_deps: Optional[List[str]] = None,
-    ):
-        """Build egg package that can be used to install in editable mode as poetry does not
-        provide it out of the box.
-
-        Args:
-            pkg: Package to build
-            skip_deps: The dependencies to ignore when building the package
-        """
-        # need to remove the `.egg-info` folders first as it will interfere with the version (ContextualVersionConflict)
-        for eggdir in glob.glob(str(pkg.location / "*.egg-info")):
-            shutil.rmtree(eggdir)
-
-        self.create_setup_py(pkg, skip_deps)
-        has_build = (pkg.location / "build").exists()
+    def _build_command(self, pkg: Package, release: bool):
         exec(
-            [self.python_path(pkg), "setup.py", "bdist_egg"],
+            "poetry build",
             cwd=pkg.location,
+            env=self.passthrough_envs,
         )
-        if not has_build and (pkg.location / "build").exists():
-            shutil.rmtree(str(pkg.location / "build"))
-
-    def get_fixed_version_pkgs(self):
-        return self.fixed_version_pkgs
-
-    def compute_pkg_hash(self, pkg: Package) -> str:
-        """Compute hash of the content of the package"""
-        self.build(pkg)
-        whl_path = self.wheel_path(pkg)
-        assert whl_path is not None
-        output = exec([self.pip_path(pkg), "hash", whl_path])[1]
-        output = output[output.find("--hash=") + len("--hash=") :]
-        assert output.startswith("sha256:")
-        return output[len("sha256:") :]
-
-    def install_dependency(
-        self,
-        pkg: Package,
-        dependency: Package,
-        editable: bool = False,
-        skip_dep_deps: Optional[List[str]] = None,
-    ):
-        assert dependency.name not in self.cfg.phantom_packages, dependency.name
-        skip_dep_deps = skip_dep_deps or []
-
-        # load pip_path outside of mask_file as without pyproject.toml, it is not a poetry package
-        # and we may get pip path from the wrong environment
-        pip_path = self.pip_path(pkg)
-        exec([pip_path, "uninstall", "-y", dependency.name])
-
-        dep_manager = self.managers[dependency.type]
-        if editable:
-            if dependency.type == PackageType.Poetry:
-                manager = cast("Poetry", dep_manager)
-                manager.create_setup_py(dependency, skip_deps=skip_dep_deps)
-                with manager.mask_file(dependency.location / "pyproject.toml"):
-                    exec([pip_path, "install", "-e", "."], cwd=dependency.location)
-                (dependency.location / "setup.py").unlink()  # remove the setup.py file
-            elif dependency.type == PackageType.Maturin:
-                manager = cast("Maturin", dep_manager)
-                manager.install(
-                    cast("MaturinPackage", dependency),
-                    editable=editable,
-                    skip_deps=skip_dep_deps,
-                    virtualenv=self.env_path(pkg.name, pkg.location),
-                )
-            else:
-                raise NotImplementedError(type(dep_manager))
-        else:
-            dep_manager.build(dependency, skip_deps=skip_dep_deps)
-            whl_path = self.wheel_path(dependency)
-            assert whl_path is not None
-            exec([pip_path, "install", whl_path])
-
-    @contextmanager  # type: ignore
-    def mask_file(
-        self,
-        file_path: Union[str, Path],
-    ):
-        """Temporary mask out a file"""
-        file_path = str(file_path)
-        assert os.path.isfile(file_path)
-        try:
-            os.rename(file_path, file_path + ".tmp")
-            yield None
-        finally:
-            os.rename(file_path + ".tmp", file_path)
-
-    def create_setup_py(
-        self,
-        pkg: Package,
-        skip_deps: Optional[List[str]] = None,
-    ):
-        """Create setup.py that can be used to install in editable mode as poetry does not
-        provide it out of the box.
-
-        Args:
-            pkg: Package to build
-            skip_deps: The dependencies to ignore when building the package
-        """
-        self.build(pkg, skip_deps)
-
-        tar_path = self.tar_path(pkg)
-        assert tar_path is not None, pkg.location
-        with tarfile.open(tar_path, "r") as g:
-            member = g.getmember(f"{pkg.name}-{pkg.version}/setup.py")
-            with open(pkg.location / "setup.py", "wb") as f:
-                memberfile = g.extractfile(member)
-                assert memberfile is not None
-                f.write(memberfile.read())
-
-    @cache_func()
-    def env_path(self, name: str, dir: Path) -> Path:
-        """Get environment path of the package, create it if doesn't exist"""
-        if not (dir / "pyproject.toml").exists():
-            raise Exception(
-                "Try to get the virtualenv location of an non-poetry package (no pyproject.toml). This won't return the right path. Please report this issue."
-            )
-
-        output = exec(
-            "poetry env list --full-path", cwd=dir, **self.exec_options("env.fetch")
-        )
-
-        if len(output) == 0:
-            # environment doesn't exist, create it
-            exec(
-                "poetry run python -m __hello__",
-                cwd=dir,
-                **self.exec_options("env.create"),
-            )
-            output = exec(
-                "poetry env list --full-path", cwd=dir, **self.exec_options("env.fetch")
-            )
-
-        if len(output) > 1:
-            logger.warning(
-                "There are multiple virtual environments for package {}, and we pick the first one (maybe incorrect). List of environments: \n{}",
-                name,
-                "\n".join(["\t- " + x for x in output]),
-            )
-
-        assert len(output) > 0
-        if output[0].endswith(" (Activated)"):
-            path = output[0].split(" ")[0]
-        else:
-            path = output[0]
-
-        if not Path(path).exists():
-            raise Exception(f"Environment path {path} doesn't exist")
-        return Path(path)
-
-    def tar_path(self, pkg: Package) -> Optional[Path]:
-        tar_file = pkg.location / "dist" / f"{pkg.name}-{pkg.version}.tar.gz"
-        if tar_file.exists():
-            return tar_file
-        return None
-
-    def wheel_path(self, pkg: Package) -> Optional[Path]:
-        whl_files = glob.glob(
-            str(pkg.location / f"dist/{pkg.name.replace('-', '_')}*.whl")
-        )
-        if len(whl_files) == 0:
-            return None
-        return Path(whl_files[0])
-
-    def pip_path(self, pkg: Package) -> Path:
-        return self.env_path(pkg.name, pkg.location) / "bin/pip"  # type: ignore
-
-    def python_path(self, pkg: Package) -> Path:
-        return self.env_path(pkg.name, pkg.location) / "bin/python"  # type: ignore
-
-    def exec_options(
-        self,
-        cmd: Literal[
-            "publish",
-            "install",
-            "build",
-            "env.remove",
-            "env.create",
-            "env.fetch",
-        ],
-    ) -> dict:
-        return {"env": ["PATH", "POETRY_VIRTUALENVS_PATH", "CC", "CXX"]}
 
     def parse_dep_spec(self, spec: Union[str, dict]) -> DepConstraint:
         if isinstance(spec, str):

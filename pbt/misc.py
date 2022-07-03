@@ -1,3 +1,4 @@
+import functools
 import os
 from pathlib import Path
 import subprocess
@@ -23,7 +24,7 @@ def exec(
     check_returncode: bool = True,
     cwd: Union[Path, str] = "./",
     redirect_stderr: bool = False,
-    env: Optional[Union[List[Union[str, NewEnvVar]], dict]] = None,
+    env: Optional[Union[List[str], List[Union[str, NewEnvVar]], dict]] = None,
 ) -> List[str]:
     """
     Execute a command and return the list of lines, in which the newline character is stripped away.
@@ -96,10 +97,37 @@ def cache_func():
     d = {}
 
     def wrapper(func):
+        @functools.wraps(func)
         def fn(*args):
             if args not in d:
                 d[args] = func(*args)
             return d[args]
+
+        return fn
+
+    return wrapper
+
+
+def cache_method():
+    """Cache instance's method during its life-time.
+    Note: Order of the arguments is important. Different order of the arguments will result in different cache key.
+    """
+
+    def wrapper(func):
+        fn_name = func.__name__
+
+        @functools.wraps(func)
+        def fn(self, *args, **kwargs):
+            if not hasattr(self, "_cache"):
+                self._cache = {}
+            k = (
+                fn_name,
+                args,
+                tuple(sorted(f"kw" + str(arg) for kw, arg in kwargs.items())),
+            )
+            if k not in self._cache:
+                self._cache[k] = func(self, *args)
+            return self._cache[k]
 
         return fn
 

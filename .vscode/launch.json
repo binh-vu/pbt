@@ -12,9 +12,8 @@
             "args": [
                 "-svv",
                 "-k",
-                "remote_diff"
+                "test_install_dependency"
             ],
-            "justMyCode": true
         }
     ]
 }

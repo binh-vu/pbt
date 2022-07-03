@@ -14,7 +14,7 @@ from pbt.vcs.git import Git
     help="Specify the multi-repository that we are working with. e.g., https://github.com/binh-vu/pbt",
 )
 @click.option("--cwd", default=".", help="Override current working directory")
-@click.argument("subcommand")
+@click.argument("subcommand", type=click.Choice(["clone", "update", "push", "snapshot"]), help="Subcommand to run")
 def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
     """Execute Git commands in a super-project"""
     cwd = os.path.abspath(cwd)

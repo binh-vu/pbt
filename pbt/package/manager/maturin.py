@@ -7,14 +7,14 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from loguru import logger
+from pbt.package.manager.python import Pep518PkgManager, PythonPkgManager,
 from pbt.package.package import DepConstraint
 from pbt.config import PBTConfig
 from pbt.diff import Diff, diff_db
-from pbt.misc import ExecProcessError, cache_func, exec
+from pbt.misc import exec
 from pbt.package.manager.manager import DepConstraints, PkgManager, build_cache
 from pbt.package.package import Package, PackageType
 from tomlkit.api import document, dumps, inline_table, loads, nl, table, array
-from tomlkit.items import Array, Key, KeyType, Trivia
 
 if TYPE_CHECKING:
     from pbt.package.manager.poetry import Poetry
@@ -27,35 +27,9 @@ class MaturinPackage(Package):
     optional_dep_name: Optional[str] = None
 
 
-class Maturin(PkgManager):
-    def __init__(self, cfg: PBTConfig, managers: Dict[PackageType, PkgManager]) -> None:
-        super().__init__()
-        self.managers = managers
-        self.cfg = cfg
-        self.fixed_version_pkgs = {"python"}
-
-    def is_package_directory(self, dir: Path) -> bool:
-        if (dir / "pyproject.toml").exists():
-            return (dir / "pyproject.toml").read_text().find(
-                'build-backend = "maturin"'
-            ) != -1
-        return False
-
-    def glob_query(self, root: Path) -> str:
-        return str(root.absolute() / "**/pyproject.toml")
-
-    def get_fixed_version_pkgs(self):
-        return self.fixed_version_pkgs
-
-    def compute_pkg_hash(self, pkg: Package) -> str:
-        """Compute hash of the content of the package"""
-        self.build(pkg)
-        whl_path = self.wheel_path(pkg)
-        assert whl_path is not None
-        output = exec([self.pip_path(pkg), "hash", whl_path])[1]
-        output = output[output.find("--hash=") + len("--hash=") :]
-        assert output.startswith("sha256:")
-        return output[len("sha256:") :]
+class Maturin(Pep518PkgManager):
+    def __init__(self, cfg: PBTConfig) -> None:
+        super().__init__(cfg, backend="maturin")
 
     def load(self, dir: Path) -> MaturinPackage:
         try:
@@ -178,7 +152,7 @@ class Maturin(PkgManager):
         """
         name, version = v.split(" ", 1)
         # do it here to make sure we can parse this version
-        PkgManager.parse_version_spec(version)
+        self.parse_version_spec(version)
         constraint = f"python=* markers="
         return name, [DepConstraint(version_spec=version, constraint=constraint)]
 
@@ -187,7 +161,7 @@ class Maturin(PkgManager):
         assert len(specs) == 1
         (spec,) = specs
         assert spec.origin_spec is None
-        version_spec = PkgManager.parse_version_spec(spec.version_spec)
+        version_spec = self.parse_version_spec(spec.version_spec)
         return version_spec.to_pep508_string()
 
     def clean(self, pkg: Package):
@@ -237,7 +211,7 @@ class Maturin(PkgManager):
                     cast("MaturinPackage", dependency),
                     editable=editable,
                     skip_deps=skip_dep_deps,
-                    virtualenv=self.env_path(pkg.name, pkg.location),
+                    virtualenv=self.venv_path(pkg.name, pkg.location),
                 )
             else:
                 raise NotImplementedError(type(dep_manager))
@@ -264,7 +238,7 @@ class Maturin(PkgManager):
 
         exc_options = self.exec_options("install")
         if virtualenv is None:
-            virtualenv = self.env_path(pkg.name, pkg.location)
+            virtualenv = self.venv_path(pkg.name, pkg.location)
 
         # set the virtual environment which the package will be installed to
         if "env" not in exc_options:
@@ -291,6 +265,7 @@ class Maturin(PkgManager):
         pkg: Package,
         skip_deps: Optional[List[str]] = None,
         additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        clean_dist: bool = True,
     ):
         """Build the package. Support ignoring some dependencies to avoid installing and solving
         dependencies multiple times (not in the super interface as compiled languages will complain).
@@ -316,7 +291,7 @@ class Maturin(PkgManager):
                             return
 
                     try:
-                        if (pkg.location / "dist").exists():
+                        if clean_dist and (pkg.location / "dist").exists():
                             shutil.rmtree(str(pkg.location / "dist"))
                         exec(
                             "maturin build -r -o dist",
@@ -340,36 +315,6 @@ class Maturin(PkgManager):
             )
 
         return None
-
-    def tar_path(self, pkg: Package) -> Optional[Path]:
-        tar_file = pkg.location / "dist" / f"{pkg.name}-{pkg.version}.tar.gz"
-        if tar_file.exists():
-            return tar_file
-        return None
-
-    def wheel_path(self, pkg: Package) -> Optional[Path]:
-        whl_files = glob.glob(
-            str(pkg.location / f"dist/{pkg.name.replace('-', '_')}*.whl")
-        )
-        if len(whl_files) == 0:
-            return None
-        return Path(whl_files[0])
-
-    def pip_path(self, pkg: Package) -> Path:
-        return self.env_path(pkg.name, pkg.location) / "bin/pip"  # type: ignore
-
-    def python_path(self, pkg: Package) -> Path:
-        return self.env_path(pkg.name, pkg.location) / "bin/python"  # type: ignore
-
-    @cache_func()
-    def env_path(self, name: str, dir: Path) -> Path:
-        """Get environment path of the package, create it if doesn't exist"""
-        path = dir / ".venv"
-        if not path.exists():
-            exec("python -m venv .venv", cwd=dir, **self.exec_options("env.create"))
-        if not path.exists():
-            raise Exception(f"Environment path {path} doesn't exist")
-        return Path(path)
 
     def exec_options(
         self,
