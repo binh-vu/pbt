@@ -40,10 +40,9 @@ pbt list [-d]
 2. **Create virtual environment of a package and install its dependencies**
 
 ```bash
-pbt install [-e] [-d] [-v] [-p <package>]
+pbt install [-d] [-v] [-p <package>]
 ```
 
-- `-e`: install the package, and its local (inter-) dependencies in editable mode
 - `-d`: also install dev-dependencies of the package
 - `-v`: verbose
 - `-p`: specify the package we want to build, if empty build all packages.
@@ -63,14 +62,6 @@ pbt clean [-p <package>]
 ```
 
 - `-p`: specify the package we want to build, if empty build all packages.
-
-5. **Create setup.py**
-
-Generate a `setup.py` file that can be used to manually install in editable mode as poetry does not provide it out of the box at the time of writing. This is usually used for debugging. Note that if you install `pip install -e .`, you need to rename the file `pyproject.toml` temporary so that `pip` will use `setup.py` instead of `pyproject.toml`.
-
-```bash
-pbt create-setuppy -p <project>
-```
 
 6. **Git clone a multi-repository project**
 

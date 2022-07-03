@@ -1,10 +1,10 @@
-name: publish pab
+name: CI
 on:
   push:
     branches:
       - master
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,11 +19,29 @@ jobs:
           poetry install
       - name: run test
         run: poetry run pytest -x
-      - name: publish
-        # use twine for now as poetry hasn't released --skip-existing option yet
-        # run: poetry publish --build --username $PYPI_USER --password $PYPI_PWD
+      - name: build wheels
+        run: poetry build
+      - name: upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+  release:
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/master') || startswith(github.ref, 'refs/heads/dev-ci')"
+    needs: [build]
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheels
+          path: dist
+      - name: setup python
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.8
+      - name: pypi publish
         run: |
-          poetry build
+          pip install twine
           twine upload --skip-existing dist/* -u $PYPI_USER -p $PYPI_PWD
         env:
           PYPI_USER: __token__

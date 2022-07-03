@@ -83,12 +83,6 @@ def list(dev: bool = False, cwd: str = ".", verbose: bool = False):
     is_flag=True,
     help="Whether to install dev-dependencies as well",
 )
-@click.option(
-    "-e",
-    "--editable",
-    is_flag=True,
-    help="Whether to install the package and its local dependencies in editable mode",
-)
 @click.option("--cwd", default=".", help="Override current working directory")
 @click.option(
     "-v",
@@ -99,14 +93,13 @@ def list(dev: bool = False, cwd: str = ".", verbose: bool = False):
 def install(
     package: List[str],
     dev: bool = False,
-    editable: bool = False,
     cwd: str = ".",
     verbose: bool = False,
 ):
     """Make package"""
     pl, cfg, pkgs = init(cwd, package, verbose)
     pl.enforce_version_consistency()
-    pl.install(sorted(pkgs), include_dev=dev, editable=editable)
+    pl.install(sorted(pkgs), include_dev=dev)
 
 
 @click.command()
