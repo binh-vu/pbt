@@ -44,5 +44,4 @@ cli.add_command(list)
 
 
 if __name__ == "__main__":
-    # check_upgrade()
     cli()
