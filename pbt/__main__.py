@@ -1,6 +1,6 @@
 import importlib.metadata
 
-import click, sys, os
+import click, sys
 from loguru import logger
 
 from pbt.console.pbt import install, clean, update, publish, list
@@ -13,9 +13,6 @@ try:
 except importlib.metadata.PackageNotFoundError:
     version = "0.0.0"
 
-logger.remove()
-logger.add(sys.stderr, level=os.environ.get("LOGURU_LEVEL", "INFO"))
-
 
 def check_upgrade():
     latest_version = PyPI.get_instance().get_latest_version("pab")
@@ -24,7 +21,7 @@ def check_upgrade():
             f"You are using an outdated version of pab. The latest version is {latest_version}, while you are using {version}."
         )
     else:
-        logger.debug("You are using the latest version of pab.")
+        logger.trace("You are using the latest version of pab.")
 
 
 @click.group(
