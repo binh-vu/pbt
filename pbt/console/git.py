@@ -14,12 +14,12 @@ from pbt.vcs.git import Git
     help="Specify the multi-repository that we are working with. e.g., https://github.com/binh-vu/pbt",
 )
 @click.option("--cwd", default=".", help="Override current working directory")
-@click.argument("subcommand", type=click.Choice(["clone", "update", "push", "snapshot"]), help="Subcommand to run")
-def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
-    """Execute Git commands in a super-project"""
+@click.argument("command", type=click.Choice(["clone", "update", "push", "snapshot"]))
+def git(repo: str, cwd: str, command: Literal["snapshot"]):
+    """Execute Git command in a super-project"""
     cwd = os.path.abspath(cwd)
 
-    if subcommand == "clone":
+    if command == "clone":
         assert repo.endswith(".git"), f"Invalid repository: `{repo}`"
 
         # clone repository
@@ -29,19 +29,19 @@ def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
         for submodule in Git.find_submodules(repo_dir):
             logger.info("Checkout submodule {}", submodule)
             Git.auto_checkout_branch(submodule)
-    elif subcommand == "update":
+    elif command == "update":
         Git.pull(cwd, submodules=True)
         # checkout the submodule to the correct branch
         for submodule in Git.find_submodules(cwd):
             logger.info("Checkout submodule {}", submodule)
             Git.auto_checkout_branch(submodule)
-    elif subcommand == "push":
+    elif command == "push":
         pbt_cfg = PBTConfig.from_dir(cwd)
         cwd = str(pbt_cfg.cwd.absolute())
         Git.push(cwd)
         for submodule_dir in Git.find_submodules(cwd):
             Git.push(submodule_dir)
-    elif subcommand == "snapshot":
+    elif command == "snapshot":
         pbt_cfg = PBTConfig.from_dir(cwd)
         cwd = str(pbt_cfg.cwd.absolute())
 
@@ -50,4 +50,4 @@ def git(repo: str, cwd: str, subcommand: Literal["snapshot"]):
             branch = Git.get_current_branch(submodule_dir)
             print(f"bash -c 'cd {submodule_dir}; git checkout {branch}; git pull'")
     else:
-        raise Exception(f"Invalid subcommand: {subcommand}")
+        raise Exception(f"Invalid command: {command}")
