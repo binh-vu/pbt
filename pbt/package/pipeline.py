@@ -178,7 +178,7 @@ class BTPipeline:
                 )
 
                 for dep in deps:
-                    if isinstance(dep, Package):
+                    if isinstance(dep, Package) and dep.name not in self.cfg.use_prebuilt_binaries:
                         logger.info("Installing local dependency: {}", dep.name)
                         skip_dep_deps = list(dep.dependencies.keys()) + list(
                             dep.dev_dependencies.keys()
