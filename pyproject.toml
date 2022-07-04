@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pab"
-version = "2.5.4"
+version = "2.5.5"
 description = "A build tool for multi-projects that leverages package registries (pypi, npmjs, etc.)"
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"
@@ -27,6 +27,7 @@ lbry-rocksdb-optimized = "^0.8.1"
 requests = "^2.28.0"
 maturin = "^0.12.20"
 typing-extensions = "^4.3.0"
+poetry = "^1.2.0b2"
 
 [tool.poetry.dev-dependencies]
 pytest-mock = "^3.6.1"
