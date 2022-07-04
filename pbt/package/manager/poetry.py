@@ -245,6 +245,9 @@ class Poetry(Pep518PkgManager):
                 options = "--only=main"
 
         with self.change_dependencies(package, skip_deps, additional_deps):
+            lock_file = package.location / "poetry.lock"
+            has_lock_file = lock_file.exists()
+
             try:
                 exec(
                     f"poetry install {options}",
@@ -266,10 +269,14 @@ class Poetry(Pep518PkgManager):
                         cwd=package.location,
                         env=env,
                     )
-            
-            lock_file = package.location / "poetry.lock"
-            if len(skip_deps) + len(additional_deps) > 0 and lock_file.exists():
-                # the lock file is not consistent with the deps in pyproject.toml, so we need to remove it
+
+            if (
+                len(skip_deps) + len(additional_deps) > 0
+                and not has_lock_file
+                and lock_file.exists()
+            ):
+                # before you didn't have any lock file, and you also modified the dependencies meaning
+                # the new lock file is not consistent with the deps in pyproject.toml, so we need to remove it
                 os.remove(lock_file)
 
     def _build_command(self, pkg: Package, release: bool):
