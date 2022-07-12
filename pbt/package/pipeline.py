@@ -156,17 +156,24 @@ class BTPipeline:
                     dep.name
                     for dep in deps
                     if isinstance(dep, Package)
-                    and (
-                        dep.name in pkg.dependencies or dep.name in pkg.dev_dependencies
-                    )
                     and (dep.name not in self.cfg.use_prebuilt_binaries)
                 ]
                 additional_deps = {
                     dep.name: next(iter(dep.invert_dependencies.values()))
-                    for dep in deps
                     if isinstance(dep, ThirdPartyPackage)
-                    and dep.name not in pkg.dependencies
-                    and dep.name not in pkg.dev_dependencies
+                    else [DepConstraint(version_spec=dep.version)]
+                    for dep in deps
+                    if (
+                        isinstance(dep, ThirdPartyPackage)
+                        and dep.name not in pkg.dependencies
+                        and dep.name not in pkg.dev_dependencies
+                    )
+                    or (
+                        isinstance(dep, Package)
+                        and dep.name not in pkg.dependencies
+                        and dep.name not in pkg.dev_dependencies
+                        and dep.name in self.cfg.use_prebuilt_binaries
+                    )
                 }
 
                 logger.info("Installing package: {}", pkg.name)
@@ -178,7 +185,10 @@ class BTPipeline:
                 )
 
                 for dep in deps:
-                    if isinstance(dep, Package) and dep.name not in self.cfg.use_prebuilt_binaries:
+                    if (
+                        isinstance(dep, Package)
+                        and dep.name not in self.cfg.use_prebuilt_binaries
+                    ):
                         logger.info("Installing local dependency: {}", dep.name)
                         skip_dep_deps = list(dep.dependencies.keys()) + list(
                             dep.dev_dependencies.keys()
