@@ -86,7 +86,7 @@ class PBTConfig:
             cache_dir=cache_dir,
             ignore_packages=set(cfg.get("ignore_packages", [])),
             phantom_packages=set(cfg.get("phantom_packages", [])),
-            use_prebuilt_binaries=set(cfg.get("use_prebuilt_binaries", True)),
+            use_prebuilt_binaries=set(cfg.get("use_prebuilt_binaries", [])),
             distribution_dir=Path(cfg.get("distribution_dir", "./dist")),
             python_virtualenvs_path=cfg.get("python_virtualenvs_path", "./.venv"),
             python_path=Path(python_path) if python_path is not None else None,
