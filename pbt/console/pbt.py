@@ -1,8 +1,11 @@
 from io import DEFAULT_BUFFER_SIZE
-from typing import Dict, List, Tuple
+from pathlib import Path
+import shutil
+from typing import Dict, List, Tuple, cast
 
 import click
 from loguru import logger
+import orjson
 
 from pbt.config import PBTConfig
 from pbt.package.manager.poetry import Poetry
@@ -187,3 +190,65 @@ def build(package: List[str], cwd: str = ".", verbose: bool = False):
             pkg = pl.pkgs[pkg_name]
             manager = pl.managers[pkg.type]
             manager.build(pkg)
+
+
+@click.command()
+@click.option(
+    "-p",
+    "--package",
+    help="The parent package",
+)
+@click.option(
+    "-d",
+    "--dep",
+    help="The dependency package",
+)
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="increase verbosity",
+)
+def install_local_pydep(
+    package: str,
+    dep: str,
+    cwd: str = ".",
+    verbose: bool = False,
+):
+    """Install a local python package in editable mode without building it. This is a temporary solution
+    for package requiring extension binary but we cannot build the binary, so we have to download the prebuilt binary
+    and put it to the src directory.
+    """
+    pl, cfg, pkgs = init(cwd, [package], verbose)
+    pl.enforce_version_consistency()
+
+    pkg = pl.pkgs[package]
+    dep_pkg = pl.pkgs[dep]
+
+    manager = pl.managers[pkg.type]
+    assert isinstance(manager, PythonPkgManager)
+
+    (site_pkg_dir,) = [
+        p
+        for p in manager.venv_path(pkg.name, pkg.location).glob(
+            f"lib/python*/site-packages"
+        )
+    ]
+
+    if (site_pkg_dir / dep).exists():
+        shutil.rmtree(site_pkg_dir / dep)
+    for dir in site_pkg_dir.glob(f"{dep}*.dist-info"):
+        shutil.rmtree(dir)
+
+    (site_pkg_dir / f"{dep}-{dep_pkg.version}.dist-info").mkdir(parents=True)
+    (
+        site_pkg_dir / f"{dep}-{dep_pkg.version}.dist-info" / "direct_url.json"
+    ).write_bytes(
+        orjson.dumps(
+            {
+                "dir_info": {"editable": True},
+                "url": f"file://{dep_pkg.location.absolute()}",
+            }
+        )
+    )
+    (site_pkg_dir / f"{dep}.pth").write_text(str(dep_pkg.location.absolute()))
