@@ -102,7 +102,7 @@ def install(
 ):
     """Make package"""
     pl, cfg, pkgs = init(cwd, package, verbose)
-    pl.enforce_version_consistency()
+    pl.enforce_version_consistency(freeze_packages=cfg.freeze_packages)
     pl.install(sorted(pkgs), include_dev=dev)
 
 
@@ -123,7 +123,7 @@ def install(
 def clean(package: List[str], cwd: str = ".", verbose: bool = False):
     """Clean packages' build & lock files"""
     pl, cfg, pkgs = init(cwd, package, verbose)
-    pl.enforce_version_consistency()
+    pl.enforce_version_consistency(freeze_packages=cfg.freeze_packages)
     for pkg_name in pkgs:
         pkg = pl.pkgs[pkg_name]
         pl.managers[pkg.type].clean(pkg)
@@ -140,7 +140,9 @@ def clean(package: List[str], cwd: str = ".", verbose: bool = False):
 def update(cwd: str = ".", verbose: bool = False):
     """Update all package inter-dependencies"""
     pl, cfg, pkgs = init(cwd, [], verbose)
-    pl.enforce_version_consistency(VersionConsistent.STRICT)
+    pl.enforce_version_consistency(
+        VersionConsistent.STRICT, freeze_packages=cfg.freeze_packages
+    )
 
 
 @click.command()
@@ -160,7 +162,7 @@ def update(cwd: str = ".", verbose: bool = False):
 def publish(package: List[str], cwd: str = ".", verbose: bool = False):
     """Publish packages"""
     pl, cfg, pkgs = init(cwd, package, verbose)
-    pl.enforce_version_consistency()
+    pl.enforce_version_consistency(freeze_packages=cfg.freeze_packages)
     pl.publish(
         pkgs,
         {
@@ -224,7 +226,7 @@ def install_local_pydep(
     so we have to download the prebuilt binary and put it to the src directory before running this command.
     """
     pl, cfg, pkgs = init(cwd, [package], verbose)
-    pl.enforce_version_consistency()
+    pl.enforce_version_consistency(freeze_packages=cfg.freeze_packages)
 
     pkg = pl.pkgs[package]
     dep_pkg = pl.pkgs[dep]
@@ -293,7 +295,7 @@ def obtain_prebuilt_binary(
     clean: bool = False,
 ):
     pl, cfg, pkgs = init(cwd, [package], verbose)
-    pl.enforce_version_consistency()
+    pl.enforce_version_consistency(freeze_packages=cfg.freeze_packages)
 
     pkg = pl.pkgs[package]
 

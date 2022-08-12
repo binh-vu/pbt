@@ -25,6 +25,8 @@ class PBTConfig:
     phantom_packages: Set[str] = field(default_factory=set)
     # use pre-built binaries for the package if available (i.e., rely on the package registry to find an installable version)
     use_prebuilt_binaries: Set[str] = field(default_factory=set)
+    # freeze the following packages and don't update their dependencies
+    freeze_packages: Set[str] = field(default_factory=set)
     # directory to store the built artifacts for release (relative to each package's location)
     distribution_dir: Path = Path("./dist")
     # the virtualenv directory (default is .venv in the project root directory)
@@ -87,6 +89,7 @@ class PBTConfig:
             ignore_packages=set(cfg.get("ignore_packages", [])),
             phantom_packages=set(cfg.get("phantom_packages", [])),
             use_prebuilt_binaries=set(cfg.get("use_prebuilt_binaries", [])),
+            freeze_packages=set(cfg.get("freeze_packages", [])),
             distribution_dir=Path(cfg.get("distribution_dir", "./dist")),
             python_virtualenvs_path=cfg.get("python_virtualenvs_path", "./.venv"),
             python_path=Path(python_path) if python_path is not None else None,

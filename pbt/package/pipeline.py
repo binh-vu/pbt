@@ -3,7 +3,7 @@ import glob
 from itertools import chain
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from loguru import logger
 from pbt.config import PBTConfig
@@ -55,6 +55,7 @@ class BTPipeline:
         self,
         mode: VersionConsistent = VersionConsistent.COMPATIBLE,
         thirdparty_mode: VersionConsistent = VersionConsistent.COMPATIBLE,
+        freeze_packages: Optional[Set[str]] = None,
     ):
         """Update version of packages & third-party packages in the project.
 
@@ -64,6 +65,7 @@ class BTPipeline:
         """
         # resolve the latest version specs of (third-party) packages
         thirdparty_pkgs = {}
+        freeze_packages = freeze_packages or set()
 
         for pkg in self.graph.iter_pkg():
             if isinstance(pkg, ThirdPartyPackage):
@@ -71,7 +73,11 @@ class BTPipeline:
 
                 try:
                     pkg_spec = manager.find_latest_specs(
-                        list(pkg.invert_dependencies.values()),
+                        [
+                            v
+                            for k, v in pkg.invert_dependencies.items()
+                            if k not in freeze_packages
+                        ],
                         mode="strict"
                         if thirdparty_mode == VersionConsistent.STRICT
                         else (
@@ -89,12 +95,15 @@ class BTPipeline:
 
                 # update graph
                 for key in pkg.invert_dependencies:
-                    pkg.invert_dependencies[key] = pkg_spec
+                    if key not in freeze_packages:
+                        pkg.invert_dependencies[key] = pkg_spec
 
         # iterate over packages and update their dependencies.
         # however, for your own packages, always use the latest version or make sure it
         # is compatible according to the mode
         for pkg in self.pkgs.values():
+            if pkg in freeze_packages:
+                continue
             manager = self.managers[pkg.type]
             is_modified = False
             for deps in [pkg.dependencies, pkg.dev_dependencies]:
