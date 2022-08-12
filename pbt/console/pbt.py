@@ -1,7 +1,7 @@
-from io import DEFAULT_BUFFER_SIZE
+import zipfile
 from pathlib import Path
 import shutil
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Literal, Tuple, cast
 
 import click
 from loguru import logger
@@ -15,6 +15,7 @@ from pbt.package.package import PackageType
 from pbt.package.pipeline import BTPipeline, VersionConsistent
 from pbt.package.registry.pypi import PyPI
 from pbt.package.manager.manager import PkgManager, build_cache
+from pbt.misc import exec
 
 
 def init(
@@ -203,6 +204,7 @@ def build(package: List[str], cwd: str = ".", verbose: bool = False):
     "--dep",
     help="The dependency package",
 )
+@click.option("--cwd", default=".", help="Override current working directory")
 @click.option(
     "-v",
     "--verbose",
@@ -215,9 +217,11 @@ def install_local_pydep(
     cwd: str = ".",
     verbose: bool = False,
 ):
-    """Install a local python package in editable mode without building it. This is a temporary solution
-    for package requiring extension binary but we cannot build the binary, so we have to download the prebuilt binary
-    and put it to the src directory.
+    """Install a local python package in editable mode without building it. This works by adding .pth file containing the path
+    to the package to the site-packages directory.
+
+    This is a temporary solution for package requiring extension binary but we cannot build the binary,
+    so we have to download the prebuilt binary and put it to the src directory before running this command.
     """
     pl, cfg, pkgs = init(cwd, [package], verbose)
     pl.enforce_version_consistency()
@@ -252,3 +256,75 @@ def install_local_pydep(
         )
     )
     (site_pkg_dir / f"{dep}.pth").write_text(str(dep_pkg.location.absolute()))
+
+
+@click.command()
+@click.option(
+    "-p",
+    "--package",
+    required=True,
+    help="The package to extract the binary from",
+)
+@click.option("--cwd", default=".", help="Override current working directory")
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="increase verbosity",
+)
+@click.option(
+    "-s",
+    "--source",
+    type=click.Choice(["build", "pypi", "build-dev"], case_sensitive=False),
+    default="build",
+    help="source where we can pull/build the dependency",
+)
+@click.option(
+    "-c",
+    "--clean",
+    is_flag=True,
+    help="whether to clean the dist directory after this command",
+)
+def obtain_prebuilt_binary(
+    package: str,
+    cwd: str = ".",
+    verbose: bool = False,
+    source: Literal["build", "pypi"] = "build",
+    clean: bool = False,
+):
+    pl, cfg, pkgs = init(cwd, [package], verbose)
+    pl.enforce_version_consistency()
+
+    pkg = pl.pkgs[package]
+
+    manager = pl.managers[pkg.type]
+    assert isinstance(manager, PythonPkgManager)
+
+    dist_dir = (pkg.location / cfg.distribution_dir).absolute()
+    shutil.rmtree(dist_dir, ignore_errors=True)
+    dist_dir.mkdir()
+
+    if source == "build" or source == "build-dev":
+        manager._build_command(pkg, release=source == "build")
+    else:
+        exec(
+            ["pip", "download", pkg.name, "--no-deps"],
+            cwd=dist_dir,
+            env=manager.passthrough_envs,
+            redirect_stderr=True,
+        )
+
+    (whl_file,) = [x for x in dist_dir.glob("*.whl")]
+    with zipfile.ZipFile(whl_file, "r") as zip_ref:
+        zip_ref.extractall(dist_dir)
+
+    pkg_name = pkg.name.replace("-", "_")
+    for file in (dist_dir / pkg_name).iterdir():
+        if file.name.endswith(".so") or file.name.endswith(".dylib"):
+            dest_file = pkg.location / pkg_name / file.name
+            if dest_file.exists():
+                dest_file.unlink()
+            shutil.move(file, pkg.location / pkg_name)
+
+    if clean:
+        shutil.rmtree(dist_dir)

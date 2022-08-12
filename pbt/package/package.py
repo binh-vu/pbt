@@ -156,3 +156,28 @@ class VersionSpec:
         if self.upperbound is not None:
             s += f", <{'=' if self.is_upperbound_inclusive else ''} {str(self.upperbound)}"
         return s
+
+    def __eq__(self, other: VersionSpec):
+        if other is None or not isinstance(other, VersionSpec):
+            return False
+
+        return (
+            (
+                (
+                    self.lowerbound is not None
+                    and other.lowerbound is not None
+                    and self.lowerbound == other.lowerbound
+                )
+                or (self.lowerbound is None and other.lowerbound is None)
+            )
+            and (
+                (
+                    self.upperbound is not None
+                    and other.upperbound is not None
+                    and self.upperbound == other.upperbound
+                )
+                or (self.upperbound is None and other.upperbound is None)
+            )
+            and (self.is_lowerbound_inclusive == other.is_lowerbound_inclusive)
+            and (self.is_upperbound_inclusive == other.is_upperbound_inclusive)
+        )

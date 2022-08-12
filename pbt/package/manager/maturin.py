@@ -197,14 +197,16 @@ class Maturin(Pep518PkgManager):
             exec(f"maturin develop -r {options}", cwd=pkg.location, env=env)
 
     def _build_command(self, pkg: Package, release: bool):
+        cmd: List[Union[str, Path]] = [
+            "maturin",
+            "build",
+        ]
+        if release:
+            cmd.append("-r")
+        cmd.extend(["-o", (pkg.location / self.cfg.distribution_dir).absolute()])
+
         exec(
-            [
-                "maturin",
-                "build",
-                "-r",
-                "-o",
-                (pkg.location / self.cfg.distribution_dir).absolute(),
-            ],
+            cmd,
             cwd=pkg.location,
             env=self.passthrough_envs,
         )

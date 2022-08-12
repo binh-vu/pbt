@@ -3,7 +3,15 @@ import importlib.metadata
 import click, sys
 from loguru import logger
 
-from pbt.console.pbt import install, clean, install_local_pydep, update, publish, list
+from pbt.console.pbt import (
+    obtain_prebuilt_binary,
+    install,
+    clean,
+    install_local_pydep,
+    update,
+    publish,
+    list,
+)
 from pbt.console.git import git
 from pbt.package.registry.pypi import PyPI
 
@@ -39,6 +47,7 @@ cli.add_command(update)
 cli.add_command(git)
 cli.add_command(list)
 cli.add_command(install_local_pydep)
+cli.add_command(obtain_prebuilt_binary)
 
 if __name__ == "__main__":
     cli()
