@@ -102,7 +102,7 @@ class BTPipeline:
         # however, for your own packages, always use the latest version or make sure it
         # is compatible according to the mode
         for pkg in self.pkgs.values():
-            if pkg in freeze_packages:
+            if pkg.name in freeze_packages:
                 continue
             manager = self.managers[pkg.type]
             is_modified = False
