@@ -59,9 +59,9 @@ class Poetry(Pep518PkgManager):
             doc = cast(dict, loads(f.read()))
 
         for dep in skip_deps:
-            if dep in doc["tool"]["poetry"]["dependencies"]:
+            if dep in doc["tool"]["poetry"].get("dependencies", {}):
                 r = doc["tool"]["poetry"]["dependencies"].remove(dep)
-            elif dep in doc["tool"]["poetry"]["dev-dependencies"]:
+            elif dep in doc["tool"]["poetry"].get("dev-dependencies", {}):
                 doc["tool"]["poetry"]["dev-dependencies"].remove(dep)
 
         for dep, specs in additional_deps.items():
@@ -102,7 +102,7 @@ class Poetry(Pep518PkgManager):
                 (dependencies, "dependencies"),
                 (dev_dependencies, "dev-dependencies"),
             ]:
-                for k, vs in project_cfg["tool"]["poetry"][cfg_key].items():
+                for k, vs in project_cfg["tool"]["poetry"].get(cfg_key, {}).items():
                     if not isinstance(vs, list):
                         vs = [vs]
                     deps[k] = sorted(
