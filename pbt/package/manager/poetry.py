@@ -255,15 +255,21 @@ class Poetry(Pep518PkgManager):
                     env=env,
                 )
             except ExecProcessError as e:
-                if str(e).find(
-                    "Warning: The lock file is not up to date with the latest changes in pyproject.toml. You may be getting outdated dependencies. Run update to update them."
+                if any(
+                    str(e).find(s) != -1
+                    for s in [
+                        "Warning: The lock file is not up to date with the latest changes in pyproject.toml. You may be getting outdated dependencies. Run update to update them.",
+                        "Warning: poetry.lock is not consistent with pyproject.toml. You may be getting improper dependencies.",
+                    ]
                 ):
                     # try to update the lock file without upgrade previous packages, and retry
+                    logger.info("Updating lock file for package: {}", package.name)
                     exec(
                         "poetry lock --no-update",
                         cwd=package.location,
                         env=env,
                     )
+                    logger.info("Re-install package: {}", package.name)
                     exec(
                         f"poetry install {options}",
                         cwd=package.location,
