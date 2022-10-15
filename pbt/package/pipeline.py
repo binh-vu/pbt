@@ -1,9 +1,6 @@
 import enum
-import glob
-from itertools import chain
 from operator import itemgetter
-from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 
 from loguru import logger
 from pbt.config import PBTConfig
@@ -14,10 +11,9 @@ from pbt.package.package import (
     Package,
     PackageType,
     DepConstraint,
-    DepConstraints,
-    VersionSpec,
 )
 from pbt.package.registry.registry import PkgRegistry
+from loguru import logger
 
 
 class VersionConsistent(enum.Enum):
@@ -39,17 +35,21 @@ class BTPipeline:
 
     def discover(self):
         """Discover packages in the project."""
+        logger.debug("Discovering packages in the project...")
         pkgs = {}
         for manager in self.managers.values():
-            for fpath in glob.glob(manager.glob_query(self.root), recursive=True):
-                if not manager.is_package_directory(Path(fpath).parent):
+            for fpath in manager.discover(
+                self.root, self.cfg.ignore_directories, self.cfg.ignore_directory_names
+            ):
+                if not manager.is_package_directory(fpath):
                     continue
-                pkg = manager.load(Path(fpath).parent)
+                pkg = manager.load(fpath)
                 if pkg.name in pkgs:
                     raise RuntimeError(f"Duplicate package {pkg.name}")
                 pkgs[pkg.name] = pkg
         self.graph = PkgGraph.from_pkgs(pkgs)
         self.pkgs = pkgs
+        logger.debug("Discovering packages in the project... Done!")
 
     def enforce_version_consistency(
         self,

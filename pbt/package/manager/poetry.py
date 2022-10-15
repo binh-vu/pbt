@@ -13,7 +13,7 @@ from pbt.misc import ExecProcessError, NewEnvVar, cache_method, exec
 from pbt.package.manager.python import Pep518PkgManager
 from pbt.package.package import DepConstraint, DepConstraints, Package, PackageType
 from tomlkit.api import document, dumps, inline_table, loads, nl, table
-from tomlkit.items import Array, Key, KeyType, Trivia
+from tomlkit.items import Array, KeyType, Trivia, SingleKey
 
 
 class Poetry(Pep518PkgManager):
@@ -100,8 +100,8 @@ class Poetry(Pep518PkgManager):
                 pkg.location / "pyproject.toml",
             )
             os.rename(
-                self.cfg.pkg_cache_dir(pkg) / "poetry.lock",
-                pkg.location / "poetry.modified.lock",
+                pkg.location / "poetry.lock",
+                self.cfg.pkg_cache_dir(pkg) / "poetry.modified.lock",
             )
             if (self.cfg.pkg_cache_dir(pkg) / "poetry.origin.lock").exists():
                 os.rename(
@@ -168,19 +168,19 @@ class Poetry(Pep518PkgManager):
                 tbl.add("description", "")
                 tbl.add("authors", [])
 
-                doc.add(Key("tool.poetry", t=KeyType.Bare), tbl)
+                doc.add(SingleKey("tool.poetry", t=KeyType.Bare), tbl)
 
                 tbl = table()
                 for dep, specs in pkg.dependencies.items():
                     tbl.add(dep, self.serialize_dep_specs(specs))
                 doc.add(nl())
-                doc.add(Key("tool.poetry.dependencies", t=KeyType.Bare), tbl)
+                doc.add(SingleKey("tool.poetry.dependencies", t=KeyType.Bare), tbl)
 
                 tbl = table()
                 for dep, specs in pkg.dev_dependencies.items():
                     tbl.add(dep, self.serialize_dep_specs(specs))
                 doc.add(nl())
-                doc.add(Key("tool.poetry.dev-dependencies", t=KeyType.Bare), tbl)
+                doc.add(SingleKey("tool.poetry.dev-dependencies", t=KeyType.Bare), tbl)
 
                 tbl = table()
                 tbl.add("requires", ["poetry-core>=1.0.0"])
@@ -282,7 +282,7 @@ class Poetry(Pep518PkgManager):
                     # try to update the lock file without upgrade previous packages, and retry
                     logger.info("Updating lock file for package: {}", package.name)
                     exec(
-                        "poetry lock --no-update",
+                        "poetry lock",
                         cwd=package.location,
                         env=env,
                     )

@@ -4,7 +4,7 @@ import glob
 import os
 from pathlib import Path
 import shutil
-from typing import Callable, Dict, List, Literal, Optional, Union, cast
+from typing import Callable, Dict, List, Literal, Optional, Set, Union, cast
 
 from loguru import logger
 from pbt.config import PBTConfig
@@ -269,6 +269,27 @@ class Pep518PkgManager(PythonPkgManager):
 
     def glob_query(self, root: Path) -> str:
         return str(root.absolute() / "**/pyproject.toml")
+
+    def discover(
+        self, root: Path, ignore_dirs: Set[Path], ignore_dirnames: Set[str]
+    ) -> List[Path]:
+        outs = []
+        root = root.resolve()
+
+        stack = [root]
+        while len(stack) > 0:
+            dir = stack.pop()
+            if (
+                dir.name.startswith(".")
+                or dir.name in ignore_dirnames
+                or dir in ignore_dirs
+            ):
+                continue
+            if (dir / "pyproject.toml").exists():
+                outs.append(dir)
+            stack.extend([subdir for subdir in dir.iterdir() if subdir.is_dir()])
+
+        return outs
 
     def is_package_directory(self, dir: Path) -> bool:
         if not (dir / "pyproject.toml").exists():

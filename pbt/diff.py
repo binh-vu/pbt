@@ -8,7 +8,7 @@ from uuid import uuid4
 import orjson
 import semver
 from loguru import logger
-from hugedict.prelude import RocksDBDict, RocksDBOptions, HugeMapping
+from hugedict.prelude import RocksDBDict, RocksDBOptions
 from pbt.config import PBTConfig
 from pbt.vcs.git import Git, GitFileStatus
 from pbt.package.manager.manager import PkgManager
@@ -18,13 +18,12 @@ from pbt.package.package import Package
 SOFT_SIZE_LIMIT = (1024**2) * 1  # 1MB
 HARD_SIZE_LIMIT = (1024**2) * 100  # 100MBs
 DIFF_DB_CACHE = {}
-DB = HugeMapping[bytes, bytes]
 
 
 @contextmanager
 def diff_db(
     pkg: Package, cfg: PBTConfig, new_connection: bool = False
-) -> Generator[DB, None, None]:
+) -> Generator["RocksDBDict[bytes, bytes]", None, None]:
     global DIFF_DB_CACHE
     db_file = str(cfg.pkg_cache_dir(pkg) / "diff.db")
     if new_connection:
@@ -69,7 +68,9 @@ class Diff:
     changed_files_content: Dict[str, Optional[bytes]]
 
     @staticmethod
-    def from_local(db: DB, manager: PkgManager, pkg: Package) -> "Diff":
+    def from_local(
+        db: "RocksDBDict[bytes, bytes]", manager: PkgManager, pkg: Package
+    ) -> "Diff":
         """Compute diff of a current package, i.e., which files of a package have been modified"""
         commit_id = Git.get_current_commit(pkg.location)
 
@@ -89,13 +90,13 @@ class Diff:
             changed_files_content={},
         )
 
-    def is_modified(self, db: DB) -> bool:
+    def is_modified(self, db: "RocksDBDict[bytes, bytes]") -> bool:
         """Check if the package's content has been updated since the last snapshot"""
         prev_commit_id = db.get(b"commit_id")
         if prev_commit_id != self.commit_id.encode():
             return True
 
-        prev_changed_files = orjson.loads(db.get(b"changed_files"))
+        prev_changed_files = orjson.loads(db[b"changed_files"])
         prev_changed_files = [GitFileStatus(*x) for x in prev_changed_files]
         if prev_changed_files != self.changed_files:
             return True
@@ -116,11 +117,10 @@ class Diff:
             self.changed_files_content[file.fpath] = None
         return False
 
-    def save(self, db: DB):
+    def save(self, db: "RocksDBDict[bytes, bytes]"):
         """Snapshot the current changes to the DB so that we can detect changes between commits"""
-        wb = WriteBatch()
-        wb.put(b"commit_id", self.commit_id.encode())
-        wb.put(b"changed_files", orjson.dumps([tuple(x) for x in self.changed_files]))
+        db[b"commit_id"] = self.commit_id.encode()
+        db[b"changed_files"] = orjson.dumps([tuple(x) for x in self.changed_files])
 
         prev_changed_files = db.get(b"changed_files")
         if prev_changed_files is not None:
@@ -130,11 +130,11 @@ class Diff:
             for file in prev_changed_files.difference(
                 (x.fpath for x in self.changed_files)
             ):
-                wb.delete(b"content:%s" % file.encode())
+                del db[b"content:%s" % file.encode()]
 
         for file in self.changed_files:
             if file.is_deleted:
-                wb.delete(b"content:%s" % file.fpath.encode())
+                del db[b"content:%s" % file.fpath.encode()]
                 continue
 
             if file.fpath not in self.changed_files_content:
@@ -144,8 +144,7 @@ class Diff:
                 if file_content is None:
                     # does not change the value since last snapshot, skip it
                     continue
-            wb.put(b"content:%s" % file.fpath.encode(), file_content)
-        db.write(wb)
+            db[b"content:%s" % file.fpath.encode()] = file_content
 
 
 @dataclass(eq=True)
