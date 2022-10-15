@@ -26,6 +26,11 @@ class Package:
     # a list of glob patterns to be excluded in the final package
     exclude: List[str]
 
+    def get_all_dependency_names(self) -> List[str]:
+        out = list(self.dependencies.keys())
+        out.extend(self.dev_dependencies.keys())
+        return out
+
 
 class PackageType(str, Enum):
     Poetry = "poetry"

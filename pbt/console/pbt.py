@@ -1,3 +1,4 @@
+import os
 import zipfile
 from pathlib import Path
 import shutil
@@ -46,7 +47,7 @@ def init(
     return pl, cfg, sorted(pkgs)
 
 
-@click.command()
+@click.command(name="list")
 @click.option(
     "-d",
     "--dev",
@@ -60,7 +61,7 @@ def init(
     is_flag=True,
     help="increase verbosity",
 )
-def list(dev: bool = False, cwd: str = ".", verbose: bool = False):
+def list_(dev: bool = False, cwd: str = ".", verbose: bool = False):
     """List all packages in the current project, and their dependencies if required."""
     pl, cfg, pkgs = init(cwd, [], verbose)
     for pkg in pl.pkgs.values():
@@ -232,42 +233,31 @@ def install_local_pydep(
     dep_pkg = pl.pkgs[dep]
 
     manager = pl.managers[pkg.type]
-    assert isinstance(manager, PythonPkgManager)
-
-    origin_dep_pkg_type = dep_pkg.type
-    if dep_pkg.type == PackageType.Maturin:
-        dep_pkg.type = PackageType.Poetry
-
-    manager.install_dependency(
-        pkg, dep_pkg, skip_dep_deps=list(dep_pkg.dependencies.keys())
+    assert isinstance(manager, PythonPkgManager) and isinstance(
+        pl.managers[dep_pkg.type], PythonPkgManager
     )
 
-    dep_pkg.type = origin_dep_pkg_type
-
-    # (site_pkg_dir,) = [
-    #     p
-    #     for p in manager.venv_path(pkg.name, pkg.location).glob(
-    #         f"lib/python*/site-packages"
-    #     )
-    # ]
-
-    # if (site_pkg_dir / dep).exists():
-    #     shutil.rmtree(site_pkg_dir / dep)
-    # for dir in site_pkg_dir.glob(f"{dep}*.dist-info"):
-    #     shutil.rmtree(dir)
-
-    # (site_pkg_dir / f"{dep}-{dep_pkg.version}.dist-info").mkdir(parents=True)
-    # (
-    #     site_pkg_dir / f"{dep}-{dep_pkg.version}.dist-info" / "direct_url.json"
-    # ).write_bytes(
-    #     orjson.dumps(
-    #         {
-    #             "dir_info": {"editable": True},
-    #             "url": f"file://{dep_pkg.location.absolute()}",
-    #         }
-    #     )
-    # )
-    # (site_pkg_dir / f"{dep}.pth").write_text(str(dep_pkg.location.absolute()))
+    if dep_pkg.type == PackageType.Maturin:
+        # manually create a pyproject.toml in poetry first
+        try:
+            os.rename(
+                dep_pkg.location / "pyproject.toml",
+                dep_pkg.location / "pyproject.origin.toml",
+            )
+            pl.managers[PackageType.Poetry].save(dep_pkg)
+            dep_pkg.type = PackageType.Poetry
+            manager.install_dependency(
+                pkg, dep_pkg, skip_dep_deps=dep_pkg.get_all_dependency_names()
+            )
+        finally:
+            os.rename(
+                dep_pkg.location / "pyproject.origin.toml",
+                dep_pkg.location / "pyproject.toml",
+            )
+    else:
+        manager.install_dependency(
+            pkg, dep_pkg, skip_dep_deps=dep_pkg.get_all_dependency_names()
+        )
 
 
 @click.command()

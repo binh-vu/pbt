@@ -10,7 +10,7 @@ from pbt.console.pbt import (
     install_local_pydep,
     update,
     publish,
-    list,
+    list_,
 )
 from pbt.console.git import git
 from pbt.package.registry.pypi import PyPI
@@ -45,7 +45,7 @@ cli.add_command(clean)
 cli.add_command(publish)
 cli.add_command(update)
 cli.add_command(git)
-cli.add_command(list)
+cli.add_command(list_)
 cli.add_command(install_local_pydep)
 cli.add_command(obtain_prebuilt_binary)
 

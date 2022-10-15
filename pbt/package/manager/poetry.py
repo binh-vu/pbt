@@ -99,10 +99,11 @@ class Poetry(Pep518PkgManager):
                 self.cfg.pkg_cache_dir(pkg) / "pyproject.origin.toml",
                 pkg.location / "pyproject.toml",
             )
-            os.rename(
-                pkg.location / "poetry.lock",
-                self.cfg.pkg_cache_dir(pkg) / "poetry.modified.lock",
-            )
+            if (pkg.location / "poetry.lock").exists():
+                os.rename(
+                    pkg.location / "poetry.lock",
+                    self.cfg.pkg_cache_dir(pkg) / "poetry.modified.lock",
+                )
             if (self.cfg.pkg_cache_dir(pkg) / "poetry.origin.lock").exists():
                 os.rename(
                     self.cfg.pkg_cache_dir(pkg) / "poetry.origin.lock",
@@ -156,8 +157,8 @@ class Poetry(Pep518PkgManager):
             exclude=exclude,
         )
 
-    def save(self, pkg: Package):
-        poetry_file = pkg.location / "pyproject.toml"
+    def save(self, pkg: Package, poetry_file: Optional[Path] = None):
+        poetry_file = poetry_file or pkg.location / "pyproject.toml"
         if not poetry_file.exists():
             with open(poetry_file, "w") as f:
                 doc = document()
@@ -240,6 +241,10 @@ class Poetry(Pep518PkgManager):
     ):
         skip_deps = skip_deps or []
         additional_deps = additional_deps or {}
+
+        if "python" in skip_deps:
+            # we cannot skip python requirements
+            skip_deps.remove("python")
 
         if virtualenv is None:
             virtualenv = self.venv_path(package.name, package.location)

@@ -199,11 +199,8 @@ class BTPipeline:
                         and dep.name not in self.cfg.use_prebuilt_binaries
                     ):
                         logger.info("Installing local dependency: {}", dep.name)
-                        skip_dep_deps = list(dep.dependencies.keys()) + list(
-                            dep.dev_dependencies.keys()
-                        )
                         manager.install_dependency(
-                            pkg, dep, skip_dep_deps=skip_dep_deps
+                            pkg, dep, skip_dep_deps=dep.get_all_dependency_names()
                         )
 
     def publish(self, pkg_names: List[str], registries: Dict[PackageType, PkgRegistry]):
