@@ -1,9 +1,9 @@
 <h1 align="center">PBT</h1>
 
 <div align="center">
-<b>pbt</b> — a build tool for multi-packages that leverages package registries (pypi, npmjs, etc.).
+<b>pbt</b> — A build tool for multiple Python projects in a single repository.
     
-![PyPI](https://img.shields.io/pypi/v/pab)
+![PyPI](https://img.shields.io/pypi/v/pbt)
 ![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
 [![GitHub Issues](https://img.shields.io/github/issues/binh-vu/pbt.svg)](https://github.com/binh-vu/pbt/issues)
 ![Contributions welcome](https://img.shields.io/badge/contributions-welcome-orange.svg)
@@ -18,7 +18,7 @@ Having all packages in the same repository make it much easier to develop, share
 ## Installation
 
 ```bash
-pip install -U pab  # not pbt
+pip install -U pbt
 ```
 
 ## Usage
