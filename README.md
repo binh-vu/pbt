@@ -1,7 +1,7 @@
 <h1 align="center">PBT</h1>
 
 <div align="center">
-<b>pbt</b> — A build tool for multiple Python projects in a single repository.
+<b>pbt</b> — A build tool for multiple Python projects in a single repository
     
 ![PyPI](https://img.shields.io/pypi/v/pbt)
 ![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
