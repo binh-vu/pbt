@@ -11,6 +11,7 @@ from pbt.misc import cache_method, exec
 
 PBT_CONFIG_FILE_NAME = "pbtconfig.json"
 PBT_LOCK_FILE_NAME = "pbt.lock"
+PBT_IGNORE_FILE_NAME = ".pbtignore"
 
 
 @dataclass
@@ -21,6 +22,10 @@ class PBTConfig:
     cache_dir: Path
     # set of packages that we ignore
     ignore_packages: Set[str] = field(default_factory=set)
+    # set of directories (absolute path) that we ignore and not search for packages in them
+    ignore_directories: Set[Path] = field(default_factory=set)
+    # set of directory name that we ignore and not search for packages in them
+    ignore_directory_names: Set[str] = field(default_factory=set)
     # packages that do not contain any code with sole purpose for installing dependencies or creating working environment
     phantom_packages: Set[str] = field(default_factory=set)
     # use pre-built binaries for the package if available (i.e., rely on the package registry to find an installable version)
@@ -75,6 +80,23 @@ class PBTConfig:
         else:
             cfg = {}
 
+        if (cwd / PBT_IGNORE_FILE_NAME).exists():
+            with open(cwd / PBT_IGNORE_FILE_NAME, "r") as f:
+                instructions = {x.strip() for x in f.readlines()}
+                if "" in instructions:
+                    instructions.remove("")
+                ignore_directories = set()
+                ignore_directory_names = set()
+                for instruction in instructions:
+                    if instruction.startswith("/"):
+                        ignore_directories.add((cwd / instruction[1:]).resolve())
+                    else:
+                        assert "/" not in instruction, instruction
+                        ignore_directory_names.add(instruction)
+        else:
+            ignore_directories = set()
+            ignore_directory_names = set()
+
         logger.info("Root directory: {}", cwd)
 
         if "python_path" not in cfg:
@@ -87,6 +109,8 @@ class PBTConfig:
             cwd=cwd,
             cache_dir=cache_dir,
             ignore_packages=set(cfg.get("ignore_packages", [])),
+            ignore_directories=ignore_directories,
+            ignore_directory_names=ignore_directory_names,
             phantom_packages=set(cfg.get("phantom_packages", [])),
             use_prebuilt_binaries=set(cfg.get("use_prebuilt_binaries", [])),
             freeze_packages=set(cfg.get("freeze_packages", [])),

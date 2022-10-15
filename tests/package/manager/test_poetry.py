@@ -137,7 +137,6 @@ version = "1.0.0"
 description = ""
 authors = []
 
-
 [tool.poetry.dependencies]
 python = "^3.8"
 numpy = "1.21.4"
@@ -147,10 +146,8 @@ foo = [
     {version = "^2.0", python = "^3.4"},
 ]
 
-
 [tool.poetry.dev-dependencies]
 black = "21.11b1"
-
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -234,30 +234,40 @@ def install_local_pydep(
     manager = pl.managers[pkg.type]
     assert isinstance(manager, PythonPkgManager)
 
-    (site_pkg_dir,) = [
-        p
-        for p in manager.venv_path(pkg.name, pkg.location).glob(
-            f"lib/python*/site-packages"
-        )
-    ]
+    origin_dep_pkg_type = dep_pkg.type
+    if dep_pkg.type == PackageType.Maturin:
+        dep_pkg.type = PackageType.Poetry
 
-    if (site_pkg_dir / dep).exists():
-        shutil.rmtree(site_pkg_dir / dep)
-    for dir in site_pkg_dir.glob(f"{dep}*.dist-info"):
-        shutil.rmtree(dir)
-
-    (site_pkg_dir / f"{dep}-{dep_pkg.version}.dist-info").mkdir(parents=True)
-    (
-        site_pkg_dir / f"{dep}-{dep_pkg.version}.dist-info" / "direct_url.json"
-    ).write_bytes(
-        orjson.dumps(
-            {
-                "dir_info": {"editable": True},
-                "url": f"file://{dep_pkg.location.absolute()}",
-            }
-        )
+    manager.install_dependency(
+        pkg, dep_pkg, skip_dep_deps=list(dep_pkg.dependencies.keys())
     )
-    (site_pkg_dir / f"{dep}.pth").write_text(str(dep_pkg.location.absolute()))
+
+    dep_pkg.type = origin_dep_pkg_type
+
+    # (site_pkg_dir,) = [
+    #     p
+    #     for p in manager.venv_path(pkg.name, pkg.location).glob(
+    #         f"lib/python*/site-packages"
+    #     )
+    # ]
+
+    # if (site_pkg_dir / dep).exists():
+    #     shutil.rmtree(site_pkg_dir / dep)
+    # for dir in site_pkg_dir.glob(f"{dep}*.dist-info"):
+    #     shutil.rmtree(dir)
+
+    # (site_pkg_dir / f"{dep}-{dep_pkg.version}.dist-info").mkdir(parents=True)
+    # (
+    #     site_pkg_dir / f"{dep}-{dep_pkg.version}.dist-info" / "direct_url.json"
+    # ).write_bytes(
+    #     orjson.dumps(
+    #         {
+    #             "dir_info": {"editable": True},
+    #             "url": f"file://{dep_pkg.location.absolute()}",
+    #         }
+    #     )
+    # )
+    # (site_pkg_dir / f"{dep}.pth").write_text(str(dep_pkg.location.absolute()))
 
 
 @click.command()

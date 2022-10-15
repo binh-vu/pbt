@@ -12,7 +12,7 @@
             "args": [
                 "-svv",
                 "-k",
-                "test_install_dependency"
+                "test_discover"
             ],
         }
     ]

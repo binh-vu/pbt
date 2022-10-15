@@ -4,7 +4,7 @@ import re
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set, Tuple, Union
+from typing import Dict, List, Literal, Optional, Sequence, Set, Tuple, Union
 
 import semver
 from pbt.config import PBTConfig
@@ -39,6 +39,22 @@ class PkgManager(ABC):
             A glob query to iterate over all specification files in the project
         """
         raise NotImplementedError()
+
+    def discover(
+        self, root: Path, ignore_dirs: Set[Path], ignore_dirnames: Set[str]
+    ) -> List[Path]:
+        """Discover potential packages in the project
+
+        Args:
+            root: The root directory to start searching
+            ignore_dirs: Do not search in these directories
+        """
+        out = [Path(f) for f in glob.glob(self.glob_query(root.resolve()))]
+        if len(ignore_dirs) > 0:
+            out = [
+                f for f in out if not f in ignore_dirs and f.name not in ignore_dirnames
+            ]
+        return out
 
     @abstractmethod
     def load(self, dir: Path) -> Package:
@@ -194,6 +210,7 @@ class PkgManager(ABC):
             else:
                 dir_paths.append(pattern)
 
+        # include nested packages
         for depfile in glob.glob(self.glob_query(pkg.location)):
             dir_paths.append(depfile)
 
