@@ -2,14 +2,13 @@ import os
 import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, Generator, List, Optional
 from uuid import uuid4
 
 import orjson
 import semver
 from loguru import logger
-from rocksdb import DB, Options, WriteBatch  # type: ignore
-
+from hugedict.prelude import RocksDBDict, RocksDBOptions, HugeMapping
 from pbt.config import PBTConfig
 from pbt.vcs.git import Git, GitFileStatus
 from pbt.package.manager.manager import PkgManager
@@ -19,21 +18,37 @@ from pbt.package.package import Package
 SOFT_SIZE_LIMIT = (1024**2) * 1  # 1MB
 HARD_SIZE_LIMIT = (1024**2) * 100  # 100MBs
 DIFF_DB_CACHE = {}
+DB = HugeMapping[bytes, bytes]
 
 
 @contextmanager
-def diff_db(pkg: Package, cfg: PBTConfig, new_connection: bool = False) -> DB:
+def diff_db(
+    pkg: Package, cfg: PBTConfig, new_connection: bool = False
+) -> Generator[DB, None, None]:
     global DIFF_DB_CACHE
     db_file = str(cfg.pkg_cache_dir(pkg) / "diff.db")
     if new_connection:
-        client = DB(db_file, Options(create_if_missing=True))
+        # client = DB(db_file, Options(create_if_missing=True))
+        client = RocksDBDict(
+            db_file,
+            RocksDBOptions(create_if_missing=True),
+            deser_key=bytes,
+            deser_value=bytes,
+            ser_value=lambda x: x,
+        )
         try:
             yield client
         finally:
-            client.close()
+            del client
     else:
         if db_file not in DIFF_DB_CACHE:
-            DIFF_DB_CACHE[db_file] = DB(db_file, Options(create_if_missing=True))
+            DIFF_DB_CACHE[db_file] = RocksDBDict(
+                db_file,
+                RocksDBOptions(create_if_missing=True),
+                deser_key=bytes,
+                deser_value=bytes,
+                ser_value=lambda x: x,
+            )
         yield DIFF_DB_CACHE[db_file]
 
 

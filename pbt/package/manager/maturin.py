@@ -2,6 +2,7 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+import shutil
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 from loguru import logger
@@ -287,21 +288,21 @@ class Maturin(Pep518PkgManager):
                     dep + " " + self.serialize_dep_specs(specs)
                 )
 
+        with open(self.cfg.pkg_cache_dir(pkg) / "pyproject.modified.toml", "w") as f:
+            f.write(dumps(cast(Any, doc)))
+
         try:
             os.rename(
                 pkg.location / "pyproject.toml",
-                self.cfg.pkg_cache_dir(pkg) / "pyproject.toml",
+                self.cfg.pkg_cache_dir(pkg) / "pyproject.origin.toml",
             )
-            with open(pkg.location / "pyproject.toml", "w") as f:
-                f.write(dumps(cast(Any, doc)))
+            shutil.copy(
+                self.cfg.pkg_cache_dir(pkg) / "pyproject.modified.toml",
+                pkg.location / "pyproject.toml",
+            )
             yield None
-        except:
-            # write down the failed project so that we can debug it
-            with open(self.cfg.pkg_cache_dir(pkg) / "pyproject.failed.toml", "w") as f:
-                f.write(dumps(cast(Any, doc)))
-            raise
         finally:
             os.rename(
-                self.cfg.pkg_cache_dir(pkg) / "pyproject.toml",
+                self.cfg.pkg_cache_dir(pkg) / "pyproject.origin.toml",
                 pkg.location / "pyproject.toml",
             )

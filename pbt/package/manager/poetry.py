@@ -1,5 +1,6 @@
 import re
 import os
+import shutil
 import semver
 from contextlib import contextmanager
 from operator import attrgetter
@@ -70,24 +71,43 @@ class Poetry(Pep518PkgManager):
                     specs
                 )
 
+        with open(self.cfg.pkg_cache_dir(pkg) / "pyproject.modified.toml", "w") as f:
+            f.write(dumps(cast(Any, doc)))
+
         try:
             os.rename(
                 pkg.location / "pyproject.toml",
-                self.cfg.pkg_cache_dir(pkg) / "pyproject.toml",
+                self.cfg.pkg_cache_dir(pkg) / "pyproject.origin.toml",
             )
-            with open(pkg.location / "pyproject.toml", "w") as f:
-                f.write(dumps(cast(Any, doc)))
-            yield None
-        except:
-            # write down the failed project so that we can debug it
-            with open(self.cfg.pkg_cache_dir(pkg) / "pyproject.failed.toml", "w") as f:
-                f.write(dumps(cast(Any, doc)))
-            raise
-        finally:
-            os.rename(
-                self.cfg.pkg_cache_dir(pkg) / "pyproject.toml",
+            if (pkg.location / "poetry.lock").exists():
+                os.rename(
+                    pkg.location / "poetry.lock",
+                    self.cfg.pkg_cache_dir(pkg) / "poetry.origin.lock",
+                )
+            shutil.copy(
+                self.cfg.pkg_cache_dir(pkg) / "pyproject.modified.toml",
                 pkg.location / "pyproject.toml",
             )
+            if (self.cfg.pkg_cache_dir(pkg) / "poetry.modified.lock").exists():
+                shutil.copy(
+                    self.cfg.pkg_cache_dir(pkg) / "poetry.modified.lock",
+                    pkg.location / "poetry.lock",
+                )
+            yield None
+        finally:
+            os.rename(
+                self.cfg.pkg_cache_dir(pkg) / "pyproject.origin.toml",
+                pkg.location / "pyproject.toml",
+            )
+            os.rename(
+                self.cfg.pkg_cache_dir(pkg) / "poetry.lock",
+                pkg.location / "poetry.modified.lock",
+            )
+            if (self.cfg.pkg_cache_dir(pkg) / "poetry.origin.lock").exists():
+                os.rename(
+                    self.cfg.pkg_cache_dir(pkg) / "poetry.origin.lock",
+                    pkg.location / "poetry.lock",
+                )
 
     def load(self, dir: Path) -> Package:
         try:
@@ -245,9 +265,6 @@ class Poetry(Pep518PkgManager):
                 options = "--only=main"
 
         with self.change_dependencies(package, skip_deps, additional_deps):
-            lock_file = package.location / "poetry.lock"
-            has_lock_file = lock_file.exists()
-
             try:
                 exec(
                     f"poetry install {options}",
@@ -275,15 +292,6 @@ class Poetry(Pep518PkgManager):
                         cwd=package.location,
                         env=env,
                     )
-
-            if (
-                len(skip_deps) + len(additional_deps) > 0
-                and not has_lock_file
-                and lock_file.exists()
-            ):
-                # before you didn't have any lock file, and you also modified the dependencies meaning
-                # the new lock file is not consistent with the deps in pyproject.toml, so we need to remove it
-                os.remove(lock_file)
 
     def _build_command(self, pkg: Package, release: bool):
         exec(
