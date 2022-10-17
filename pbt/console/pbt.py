@@ -225,10 +225,10 @@ def install_local_pydep(
 
     This is a temporary solution for package requiring extension binary but we cannot build the binary,
     so we have to download the prebuilt binary and put it to the src directory before running this command.
+
+    Note: this command won't enforce version consistency as it is intended to be used in hacky situations.
     """
     pl, cfg, pkgs = init(cwd, [package], verbose)
-    pl.enforce_version_consistency(freeze_packages=cfg.freeze_packages)
-
     pkg = pl.pkgs[package]
     dep_pkg = pl.pkgs[dep]
 
@@ -295,8 +295,6 @@ def obtain_prebuilt_binary(
     clean: bool = False,
 ):
     pl, cfg, pkgs = init(cwd, [package], verbose)
-    pl.enforce_version_consistency(freeze_packages=cfg.freeze_packages)
-
     pkg = pl.pkgs[package]
 
     manager = pl.managers[pkg.type]
