@@ -9,7 +9,6 @@ readme = "README.md"
 license = "MIT"
 
 [tool.poetry.scripts]
-pab = 'pbt.__main__:cli'
 pbt = 'pbt.__main__:cli'
 
 [tool.poetry.dependencies]

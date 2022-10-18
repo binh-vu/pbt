@@ -17,19 +17,19 @@ from pbt.package.registry.pypi import PyPI
 
 
 try:
-    version = importlib.metadata.version("pab")
+    version = importlib.metadata.version("pbt")
 except importlib.metadata.PackageNotFoundError:
     version = "0.0.0"
 
 
 def check_upgrade():
-    latest_version = PyPI.get_instance().get_latest_version("pab")
+    latest_version = PyPI.get_instance().get_latest_version("pbt")
     if latest_version is not None and version != latest_version:
         logger.warning(
-            f"You are using an outdated version of pab. The latest version is {latest_version}, while you are using {version}."
+            f"You are using an outdated version of pbt. The latest version is {latest_version}, while you are using {version}."
         )
     else:
-        logger.trace("You are using the latest version of pab.")
+        logger.trace("You are using the latest version of pbt.")
 
 
 @click.group(
