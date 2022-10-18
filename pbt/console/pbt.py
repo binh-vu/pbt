@@ -207,6 +207,11 @@ def build(package: List[str], cwd: str = ".", verbose: bool = False):
     "--dep",
     help="The dependency package",
 )
+@click.option(
+    "--include-dep-deps",
+    is_flag=True,
+    help="Whether to also install the dependencies of the dependency",
+)
 @click.option("--cwd", default=".", help="Override current working directory")
 @click.option(
     "-v",
@@ -217,6 +222,7 @@ def build(package: List[str], cwd: str = ".", verbose: bool = False):
 def install_local_pydep(
     package: str,
     dep: str,
+    include_dep_deps: bool,
     cwd: str = ".",
     verbose: bool = False,
 ):
@@ -231,6 +237,12 @@ def install_local_pydep(
     pl, cfg, pkgs = init(cwd, [package], verbose)
     pkg = pl.pkgs[package]
     dep_pkg = pl.pkgs[dep]
+
+    logger.info(
+        "Installing {} in editable mode inside {}'s environment", dep_pkg.name, pkg.name
+    )
+    if include_dep_deps:
+        logger.info("Also installing {}'s dependencies", dep_pkg.name)
 
     manager = pl.managers[pkg.type]
     assert isinstance(manager, PythonPkgManager) and isinstance(
@@ -247,7 +259,11 @@ def install_local_pydep(
             pl.managers[PackageType.Poetry].save(dep_pkg)
             dep_pkg.type = PackageType.Poetry
             manager.install_dependency(
-                pkg, dep_pkg, skip_dep_deps=dep_pkg.get_all_dependency_names()
+                pkg,
+                dep_pkg,
+                skip_dep_deps=dep_pkg.get_all_dependency_names()
+                if not include_dep_deps
+                else [],
             )
         finally:
             os.rename(
@@ -256,7 +272,11 @@ def install_local_pydep(
             )
     else:
         manager.install_dependency(
-            pkg, dep_pkg, skip_dep_deps=dep_pkg.get_all_dependency_names()
+            pkg,
+            dep_pkg,
+            skip_dep_deps=dep_pkg.get_all_dependency_names()
+            if not include_dep_deps
+            else [],
         )
 
 
