@@ -24,6 +24,7 @@ def exec(
     check_returncode: bool = True,
     cwd: Union[Path, str] = "./",
     redirect_stderr: bool = False,
+    capture_stdout: bool = True,
     env: Optional[Union[List[str], List[Union[str, NewEnvVar]], dict]] = None,
 ) -> List[str]:
     """
@@ -35,6 +36,7 @@ def exec(
         check_returncode: Whether to check the return code.
         cwd: working directory.
         redirect_stderr: Whether to redirect stderr to stdout.
+        capture_stdout: Whether to capture stdout. For running poetry command, we may not want to capture because they manipulate output lines.
         env: the environment variables to use in this process.
             - None is use the default behavior of Popen
             - a list of strings/dictionaries:
@@ -62,27 +64,32 @@ def exec(
                     tmp[item["name"]] = item["value"]
             env = tmp
 
-    p = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT if redirect_stderr else None,
-        cwd=str(cwd),
-        env=env,
-    )
-    output = []
+    if capture_stdout:
+        p = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT if redirect_stderr else None,
+            cwd=str(cwd),
+            env=env,
+        )
+        output = []
 
-    while True:
-        assert p.stdout is not None
-        line = p.stdout.readline().decode("utf-8")
-        if line != "":
-            assert line[-1] == "\n"
-            line = line[:-1]
-            output.append(line)
-            handler(line)
-        elif p.poll() is not None:
-            break
+        while True:
+            assert p.stdout is not None
+            line = p.stdout.readline().decode("utf-8")
+            if line != "":
+                assert line[-1] == "\n"
+                line = line[:-1]
+                output.append(line)
+                handler(line)
+            elif p.poll() is not None:
+                break
 
-    returncode = p.returncode
+        returncode = p.returncode
+    else:
+        returncode = subprocess.call(cmd, cwd=str(cwd), env=env)
+        output = []
+
     if check_returncode and returncode != 0:
         msg = (
             f"Command: f{cmd} returns non-zero exit status {returncode}\n"

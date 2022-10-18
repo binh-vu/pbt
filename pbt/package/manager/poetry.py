@@ -271,34 +271,24 @@ class Poetry(Pep518PkgManager):
 
         with self.change_dependencies(package, skip_deps, additional_deps):
             try:
+                exec("poetry lock --check", cwd=package.location, env=env)
+            except ExecProcessError:
+                logger.debug(
+                    "poetry.lock is consistent with pyproject.toml, updating lock file..."
+                )
                 exec(
-                    f"poetry install {options}",
+                    "poetry lock --no-update",
                     cwd=package.location,
+                    capture_stdout=False,
                     env=env,
                 )
-            except ExecProcessError as e:
-                if any(
-                    str(e).find(s) != -1
-                    for s in [
-                        "Warning: The lock file is not up to date with the latest changes in pyproject.toml. You may be getting outdated dependencies. Run update to update them.",
-                        "Warning: poetry.lock is not consistent with pyproject.toml. You may be getting improper dependencies.",
-                    ]
-                ):
-                    # try to update the lock file without upgrade previous packages, and retry
-                    logger.info("Updating lock file for package: {}", package.name)
-                    exec(
-                        "poetry lock",
-                        cwd=package.location,
-                        env=env,
-                    )
-                    logger.info("Re-install package: {}", package.name)
-                    exec(
-                        f"poetry install {options}",
-                        cwd=package.location,
-                        env=env,
-                    )
-                else:
-                    raise
+
+            exec(
+                f"poetry install {options}",
+                cwd=package.location,
+                capture_stdout=False,
+                env=env,
+            )
 
     def _build_command(self, pkg: Package, release: bool):
         exec(
