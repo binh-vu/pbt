@@ -390,12 +390,22 @@ class PkgManager(ABC):
         """
         m = re.match(r"(\^|~|>|>=|==|<|<=) *([^ ]+)", version_spec)
         if m is None:
-            raise NotImplementedError(
-                f"Not implementing update complicated version spec `{version_spec}` yet"
-            )
+            complex_spec = True
+            if version_spec[0].isdigit():
+                try:
+                    self.parse_version(version_spec)
+                    complex_spec = False
+                except AssertionError:
+                    pass
 
-        groups = m.groups()
-        return f"{groups[0]}{str(version)}"
+            if complex_spec:
+                raise NotImplementedError(
+                    f"Not implementing update complicated version spec `{version_spec}` yet"
+                )
+            formula = "=="
+        else:
+            formula = m.groups()[0]
+        return f"{formula}{str(version)}"
 
     @classmethod
     @cache_func()
