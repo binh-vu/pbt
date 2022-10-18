@@ -297,6 +297,8 @@ class Poetry(Pep518PkgManager):
                         cwd=package.location,
                         env=env,
                     )
+                else:
+                    raise
 
     def _build_command(self, pkg: Package, release: bool):
         exec(
