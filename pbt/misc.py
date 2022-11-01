@@ -2,7 +2,7 @@ import functools
 import os
 from pathlib import Path
 import subprocess
-from typing import Callable, List, Union, Optional
+from typing import Callable, List, Sequence, Union, Optional
 from typing_extensions import TypedDict
 
 
@@ -19,7 +19,7 @@ def stdout(line):
 
 
 def exec(
-    cmd: Union[str, List[Union[str, Path]]],
+    cmd: Union[str, Sequence[Union[str, Path]]],
     handler: Optional[Callable[[str], None]] = None,
     check_returncode: bool = True,
     cwd: Union[Path, str] = "./",
