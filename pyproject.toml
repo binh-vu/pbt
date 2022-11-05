@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pbt"
-version = "2.10.1"
+version = "2.10.2"
 description = "A build tool for multiple Python projects in a single repository"
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"
@@ -28,7 +28,7 @@ hugedict = "^2.7.1"
 [tool.poetry.dev-dependencies]
 pytest-mock = "^3.6.1"
 pytest = "^7.1.3"
-pytest-cov = "^3.0.0"
+pytest-cov = "^4.0.0"
 black = "^22.8.0"
 
 [build-system]

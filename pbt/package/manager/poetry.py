@@ -274,7 +274,7 @@ class Poetry(Pep518PkgManager):
                 exec("poetry lock --check", cwd=package.location, env=env)
             except ExecProcessError:
                 logger.debug(
-                    "poetry.lock is consistent with pyproject.toml, updating lock file..."
+                    "poetry.lock is inconsistent with pyproject.toml, updating lock file..."
                 )
                 exec(
                     "poetry lock --no-update",
