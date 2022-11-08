@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pbt"
-version = "2.10.2"
+version = "2.10.3"
 description = "A build tool for multiple Python projects in a single repository"
 authors = ["Binh Vu <binh@toan2.com>"]
 homepage = "https://github.com/binh-vu/pbt"

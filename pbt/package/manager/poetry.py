@@ -270,18 +270,19 @@ class Poetry(Pep518PkgManager):
                 options = "--only=main"
 
         with self.change_dependencies(package, skip_deps, additional_deps):
-            try:
-                exec("poetry lock --check", cwd=package.location, env=env)
-            except ExecProcessError:
-                logger.debug(
-                    "poetry.lock is inconsistent with pyproject.toml, updating lock file..."
-                )
-                exec(
-                    "poetry lock --no-update",
-                    cwd=package.location,
-                    capture_stdout=False,
-                    env=env,
-                )
+            if (package.location / "poetry.lock").exists():
+                try:
+                    exec("poetry lock --check", cwd=package.location, env=env)
+                except ExecProcessError:
+                    logger.debug(
+                        "poetry.lock is inconsistent with pyproject.toml, updating lock file..."
+                    )
+                    exec(
+                        "poetry lock --no-update",
+                        cwd=package.location,
+                        capture_stdout=False,
+                        env=env,
+                    )
 
             exec(
                 f"poetry install {options}",
