@@ -243,6 +243,11 @@ def install_local_pydep(
     )
     if include_dep_deps:
         logger.info("Also installing {}'s dependencies", dep_pkg.name)
+        skip_dep_deps = [
+            name for name in dep_pkg.get_all_dependency_names() if name in pl.pkgs
+        ]
+    else:
+        skip_dep_deps = dep_pkg.get_all_dependency_names()
 
     manager = pl.managers[pkg.type]
     assert isinstance(manager, PythonPkgManager) and isinstance(
@@ -261,9 +266,7 @@ def install_local_pydep(
             manager.install_dependency(
                 pkg,
                 dep_pkg,
-                skip_dep_deps=dep_pkg.get_all_dependency_names()
-                if not include_dep_deps
-                else [],
+                skip_dep_deps=skip_dep_deps,
             )
         finally:
             os.rename(
@@ -274,9 +277,7 @@ def install_local_pydep(
         manager.install_dependency(
             pkg,
             dep_pkg,
-            skip_dep_deps=dep_pkg.get_all_dependency_names()
-            if not include_dep_deps
-            else [],
+            skip_dep_deps=skip_dep_deps,
         )
 
 
