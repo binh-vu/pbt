@@ -340,7 +340,16 @@ def obtain_prebuilt_binary(
         zip_ref.extractall(dist_dir)
 
     pkg_name = pkg.name.replace("-", "_")
-    for file in (dist_dir / pkg_name).iterdir():
+    pkg_dir = dist_dir / pkg_name
+    if not pkg_dir.exists():
+        for name in pkg.include:
+            pkg_dir = dist_dir / name.replace("-", "_")
+            if pkg_dir.exists():
+                break
+        else:
+            raise RuntimeError(f"Cannot find the package directory in {dist_dir}")
+
+    for file in pkg_dir.iterdir():
         if file.name.endswith(".so") or file.name.endswith(".dylib"):
             dest_file = pkg.location / pkg_name / file.name
             if dest_file.exists():
