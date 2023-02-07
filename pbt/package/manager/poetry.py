@@ -168,6 +168,8 @@ class Poetry(Pep518PkgManager):
                 tbl.add("version", pkg.version)
                 tbl.add("description", "")
                 tbl.add("authors", [])
+                tbl.add("exclude", pkg.exclude)
+                tbl.add("packages", [{"include": x} for x in pkg.include])
 
                 doc.add(SingleKey("tool.poetry", t=KeyType.Bare), tbl)
 

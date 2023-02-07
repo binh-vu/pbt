@@ -53,6 +53,11 @@ class Maturin(Pep518PkgManager):
                 # https://peps.python.org/pep-0621/#specify-files-to-include-when-building
                 include = []
                 exclude = []
+                if "tool" in project_cfg and "maturin" in project_cfg["tool"]:
+                    if "include" in project_cfg["tool"]["maturin"]:
+                        include = project_cfg["tool"]["maturin"]["include"]
+                    if "exclude" in project_cfg["tool"]["maturin"]:
+                        exclude = project_cfg["tool"]["maturin"]["exclude"]
         except:
             logger.error("Error while parsing configuration in {}", dir)
             raise
