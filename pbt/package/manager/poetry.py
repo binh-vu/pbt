@@ -168,8 +168,11 @@ class Poetry(Pep518PkgManager):
                 tbl.add("version", pkg.version)
                 tbl.add("description", "")
                 tbl.add("authors", [])
-                tbl.add("exclude", pkg.exclude)
-                tbl.add("packages", [{"include": x} for x in pkg.include])
+
+                if len(pkg.exclude) > 0:
+                    tbl.add("exclude", pkg.exclude)
+                if sum(int(x != pkg.name) for x in pkg.include) > 0:
+                    tbl.add("packages", [{"include": x} for x in pkg.include])
 
                 doc.add(SingleKey("tool.poetry", t=KeyType.Bare), tbl)
 
@@ -205,6 +208,23 @@ class Poetry(Pep518PkgManager):
 
             if pkg.version != doc["tool"]["poetry"]["version"]:
                 doc["tool"]["poetry"]["version"] = pkg.version
+                is_modified = True
+
+            if pkg.exclude != doc["tool"]["poetry"].get("exclude", []):
+                doc["tool"]["poetry"]["exclude"] = pkg.exclude
+                is_modified = True
+
+            include = doc["tool"]["poetry"].get("include", [])
+            include.append(pkg.name)
+            for pkg_cfg in doc["tool"]["poetry"].get("packages", []):
+                include.append(
+                    os.path.join(pkg_cfg.get("from", ""), pkg_cfg["include"])
+                )
+            include = sorted(set(include))
+            if pkg.include != include:
+                doc["tool"]["poetry"]["packages"] = [
+                    {"include": x} for x in pkg.include
+                ]
                 is_modified = True
 
             for dependencies, corr_key in [
