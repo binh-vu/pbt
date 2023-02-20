@@ -22,7 +22,15 @@ class PythonPkgManager(PkgManager):
         super().__init__(cfg)
         self.managers: Dict[PackageType, PkgManager] = {pkg_type: self}
         self.fixed_version_pkgs = {"python"}
-        self.passthrough_envs = ["PATH", "CC", "CXX"]
+        self.passthrough_envs = [
+            "PATH",
+            "CC",
+            "CXX",
+            "LIBCLANG_PATH",
+            "LD_LIBRARY_PATH",
+            "C_INCLUDE_PATH",
+            "CPLUS_INCLUDE_PATH",
+        ]
 
     def set_package_managers(self, managers: Dict[PackageType, PkgManager]):
         """Set all package managers, which will be used to retrieve correct package manager
