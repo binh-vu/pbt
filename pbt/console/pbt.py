@@ -343,7 +343,8 @@ def obtain_prebuilt_binary(
     pkg_dir = dist_dir / pkg_name
     if not pkg_dir.exists():
         for name in pkg.include:
-            pkg_dir = dist_dir / name.replace("-", "_")
+            pkg_name = name.replace("-", "_")
+            pkg_dir = dist_dir / pkg_name
             if pkg_dir.exists():
                 break
         else:
