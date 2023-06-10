@@ -162,9 +162,17 @@ class Maturin(Pep518PkgManager):
         # not implement all cases yet
         assert len(specs) == 1
         (spec,) = specs
-        assert spec.origin_spec is None
+        if spec.origin_spec is None:
+            prefix = ""
+        else:
+            if len(spec.origin_spec) == 1 and 'extras' in spec.origin_spec:
+                prefix = f"[{''.join(spec.origin_spec['extras'])}]"
+            else:
+                raise NotImplementedError(
+                    "Don't support all cases of origin_spec yet: {}" % str(spec.origin_spec)
+                )
         version_spec = self.parse_version_spec(spec.version_spec)
-        return version_spec.to_pep508_string()
+        return prefix + " " + version_spec.to_pep508_string()
 
     def clean(self, pkg: Package):
         super().clean(pkg)
@@ -188,6 +196,12 @@ class Maturin(Pep518PkgManager):
         options = ""
         if include_dev and pkg.optional_dep_name is not None:
             options += " --extras=" + pkg.optional_dep_name
+        if "python" not in skip_deps:
+            # we have to skip python requirements from poetry
+            skip_deps.append("python")
+        if "python" in additional_deps:
+            additional_deps = additional_deps.copy()
+            del additional_deps["python"]
 
         if virtualenv is None:
             virtualenv = self.venv_path(pkg.name, pkg.location)

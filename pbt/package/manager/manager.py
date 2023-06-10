@@ -314,7 +314,7 @@ class PkgManager(ABC):
         """
         m = re.match(
             r"(?P<op1>\^|~|>|>=|==|<|<=)? *(?P<version1>[^ ,\^\~>=<]+)(?:(?:(?: *, *)|(?: +))(?P<op2>\^|~|>|>=|==|<|<=) *(?P<version2>[^ ,\^\~>=<]+))?",
-            rule,
+            rule.strip(),
         )
         assert (
             m is not None
