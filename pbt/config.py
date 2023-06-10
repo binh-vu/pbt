@@ -19,7 +19,7 @@ class PBTConfig:
     # current working directory
     cwd: Path
     # directory
-    cache_dir: Path
+    cache_dir: Path = Path("./.cache")
     # set of packages that we ignore
     ignore_packages: Set[str] = field(default_factory=set)
     # set of directories (absolute path) that we ignore and not search for packages in them
@@ -38,6 +38,10 @@ class PBTConfig:
     python_virtualenvs_path: str = "./.venv"
     # python executable to use for building and installing packages, default (None) is the first one on PATH
     python_path: Optional[Path] = None
+    # path to the directory containing dependencies
+    library_path: Path = Path("./libraries")
+    # list of repositories of dependencies
+    dependency_repos: List[str] = field(default_factory=list)
 
     @staticmethod
     def from_dir(cwd: Union[Path, str]) -> "PBTConfig":
@@ -117,6 +121,8 @@ class PBTConfig:
             distribution_dir=Path(cfg.get("distribution_dir", "./dist")),
             python_virtualenvs_path=cfg.get("python_virtualenvs_path", "./.venv"),
             python_path=Path(python_path) if python_path is not None else None,
+            library_path=Path(cfg.get("library_path", "./libraries")),
+            dependency_repos=cfg.get("dependency_repos", []),
         )
 
     def pkg_cache_dir(self, pkg: Package) -> Path:

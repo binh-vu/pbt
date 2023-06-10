@@ -45,7 +45,9 @@ class BTPipeline:
                     continue
                 pkg = manager.load(fpath)
                 if pkg.name in pkgs:
-                    raise RuntimeError(f"Duplicate package {pkg.name}")
+                    raise RuntimeError(
+                        f"Duplicate package {pkg.name}: found in {pkg.location} and {pkgs[pkg.name].location}"
+                    )
                 pkgs[pkg.name] = pkg
         self.graph = PkgGraph.from_pkgs(pkgs)
         self.pkgs = pkgs

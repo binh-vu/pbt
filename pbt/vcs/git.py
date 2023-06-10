@@ -41,6 +41,15 @@ PathOrStr = Union[str, Path]
 
 class Git:
     @classmethod
+    def is_git_dir(cls, cwd: PathOrStr) -> bool:
+        return (Path(cwd) / ".git").exists()
+
+    @classmethod
+    def get_repo(cls, cwd: PathOrStr) -> str:
+        (out,) = exec("git config --get remote.origin.url", cwd=cwd)
+        return out
+
+    @classmethod
     def get_new_modified_deleted_files(cls, cwd: PathOrStr):
         (git_dir,) = exec("git rev-parse --show-toplevel", cwd=cwd)
         assert Path(git_dir).exists()
@@ -274,7 +283,7 @@ class Git:
         subprocess.check_output(["git", "commit", "-m", f"'{msg}'"], cwd=cwd)
 
     @classmethod
-    def clone_all(cls, repo: str, cwd: PathOrStr) -> Path:
+    def clone(cls, repo: str, cwd: PathOrStr, submodules: bool = False) -> Path:
         """Clone a repository and its submodules. Then, return the cloned directory"""
         # get repo name to create directory to clone the repo into
         repo_name = repo.rsplit("/", 1)[-1].replace(".git", "")
@@ -288,23 +297,19 @@ class Git:
                 f"Directory {repo_dir.parent} does not exist. Can't clone the repository into it"
             )
 
-        subprocess.check_call(
-            [
-                "git",
-                "clone",
-                "--recurse-submodules",
-                "-j8",
-                repo,
-            ],
-            cwd=cwd,
-        )
-
+        if submodules:
+            cmd = "git clone --recurse-submodules -j8"
+        else:
+            cmd = "git clone"
+        exec(cmd + " " + repo, cwd=cwd, capture_stdout=False)
         return repo_dir
 
     @classmethod
     def find_submodules(cls, repo_dir: PathOrStr) -> List[Path]:
         """Find submodules of a repository."""
         repo_dir = Path(os.path.abspath(repo_dir))
+        if not (repo_dir / ".gitmodules").exists():
+            return []
 
         submodules = [
             repo_dir / line.split(" ")[-1]
