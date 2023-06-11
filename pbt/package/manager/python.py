@@ -30,6 +30,8 @@ class PythonPkgManager(PkgManager):
             "LD_LIBRARY_PATH",
             "C_INCLUDE_PATH",
             "CPLUS_INCLUDE_PATH",
+            "CARGO_HOME",
+            "RUSTUP_HOME",
         ]
 
     def set_package_managers(self, managers: Dict[PackageType, PkgManager]):
