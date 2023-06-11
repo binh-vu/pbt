@@ -165,14 +165,17 @@ class Maturin(Pep518PkgManager):
         if spec.origin_spec is None:
             prefix = ""
         else:
-            if len(spec.origin_spec) == 1 and 'extras' in spec.origin_spec:
+            if len(spec.origin_spec) == 1 and "extras" in spec.origin_spec:
                 prefix = f"[{''.join(spec.origin_spec['extras'])}]"
             else:
                 raise NotImplementedError(
-                    "Don't support all cases of origin_spec yet: {}" % str(spec.origin_spec)
+                    "Don't support all cases of origin_spec yet: {}"
+                    % str(spec.origin_spec)
                 )
         version_spec = self.parse_version_spec(spec.version_spec)
-        return prefix + " " + version_spec.to_pep508_string()
+        return (
+            prefix + (" " if len(prefix) > 0 else "") + version_spec.to_pep508_string()
+        )
 
     def clean(self, pkg: Package):
         super().clean(pkg)
