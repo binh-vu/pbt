@@ -24,6 +24,7 @@ maturin = "^1.0.1"
 typing-extensions = "^4.4.0"
 poetry = "^1.5.1"
 hugedict = "^2.9.2"
+pep508-rs = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 pytest-mock = "^3.6.1"

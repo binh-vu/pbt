@@ -7,9 +7,11 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Sequence, Set, Tuple, Union
 
 import semver
+
 from pbt.config import PBTConfig
 from pbt.misc import cache_func, cache_method
-from pbt.package.package import DepConstraint, DepConstraints, Package, VersionSpec
+from pbt.package.dependency_specification import DependencySpecification
+from pbt.package.package import Package, VersionSpec
 
 
 class PkgManager(ABC):
@@ -98,7 +100,7 @@ class PkgManager(ABC):
         self,
         package: Package,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[Dict[str, DependencySpecification]] = None,
         release: bool = True,
         clean_dist: bool = True,
     ):
@@ -141,7 +143,7 @@ class PkgManager(ABC):
         package: Package,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[Dict[str, DependencySpecification]] = None,
     ):
         """Install the package, assuming the the specification is updated. Note that if the package is phantom, only the dependencies are installed.
 
@@ -169,7 +171,7 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_fixed_version_pkgs(self) -> Set[str]:
+    def get_pinned_version_pkgs(self) -> Set[str]:
         """Get set of packages which versions are fixed and never should updated."""
         raise NotImplementedError()
 
@@ -228,9 +230,9 @@ class PkgManager(ABC):
 
     def find_latest_specs(
         self,
-        lst_specs: List[DepConstraints],
+        lst_specs: List[DependencySpecification],
         mode: Optional[Literal["strict", "compatible"]] = None,
-    ) -> DepConstraints:
+    ) -> DependencySpecification:
         """Given a set of specs, some of them may be the same, some of them are older.
 
         This function finds the latest version for each constraint based on the lowerbound
@@ -242,7 +244,15 @@ class PkgManager(ABC):
                 'compatible' means all versions must be compatible.
                 None means we don't check
         """
-        constraints: Dict[Optional[str], Tuple[VersionSpec, DepConstraint]] = {}
+        constraints: Dict[
+            Optional[str], Tuple[VersionSpec, DependencySpecification]
+        ] = {}
+
+        if mode == "compatible":
+            
+        for spec in lst_specs:
+
+
         for specs in lst_specs:
             for spec in specs:
                 version_spec = self.parse_version_spec(spec.version_spec)
@@ -288,16 +298,16 @@ class PkgManager(ABC):
         # sort to make the order consistent
         return [v[1] for k, v in sorted(constraints.items(), key=lambda x: x[0] or "")]
 
-    def is_version_compatible(
-        self, version: semver.VersionInfo, version_spec: str
-    ) -> bool:
-        """Check if the given version is compatible with the given rule
+    # def is_version_compatible(
+    #     self, version: semver.VersionInfo, version_spec: str
+    # ) -> bool:
+    #     """Check if the given version is compatible with the given rule
 
-        Args:
-            version: package version
-            version_spec: The version spec to check against
-        """
-        return self.parse_version_spec(version_spec).is_version_compatible(version)
+    #     Args:
+    #         version: package version
+    #         version_spec: The version spec to check against
+    #     """
+    #     return self.parse_version_spec(version_spec).is_version_compatible(version)
 
     @classmethod
     @cache_func()

@@ -1,6 +1,5 @@
-from pbt.package.package import DepConstraint
-from tests.conftest import pylib, Repo
 from pbt.package.graph import PkgGraph
+from tests.conftest import Repo, pylib
 
 
 def test_from_pkgs(repo1: Repo):

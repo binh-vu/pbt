@@ -3,17 +3,13 @@ from operator import itemgetter
 from typing import Dict, List, Optional, Set
 
 from loguru import logger
+
 from pbt.config import PBTConfig
 from pbt.diff import RemoteDiff
 from pbt.package.graph import PkgGraph, ThirdPartyPackage
 from pbt.package.manager.manager import PkgManager, build_cache
-from pbt.package.package import (
-    Package,
-    PackageType,
-    DepConstraint,
-)
+from pbt.package.package import Package, PackageType
 from pbt.package.registry.registry import PkgRegistry
-from loguru import logger
 
 
 class VersionConsistent(enum.Enum):
@@ -101,43 +97,37 @@ class BTPipeline:
                         pkg.invert_dependencies[key] = pkg_spec
 
         # iterate over packages and update their dependencies.
-        # however, for your own packages, always use the latest version or make sure it
-        # is compatible according to the mode
         for pkg in self.pkgs.values():
             if pkg.name in freeze_packages:
                 continue
             manager = self.managers[pkg.type]
             is_modified = False
             for deps in [pkg.dependencies, pkg.dev_dependencies]:
-                for dep, specs in deps.items():
-                    if dep in manager.get_fixed_version_pkgs():
+                for dep, spec in deps.items():
+                    if dep in manager.get_pinned_version_pkgs():
                         # skip fixed version packages
                         continue
 
                     if dep in self.pkgs:
                         # update your own packages
-                        dep_version = manager.parse_version(self.pkgs[dep].version)
                         if mode == VersionConsistent.COMPATIBLE:
-                            for spec in specs:
-                                if not manager.is_version_compatible(
-                                    dep_version, spec.version_spec
-                                ):
-                                    spec.version_spec = manager.update_version_spec(
-                                        spec.version_spec, dep_version
-                                    )
-                                    is_modified = True
+                            if not spec.is_version_compatible(self.pkgs[dep].version):
+                                spec = spec.update_version(
+                                    self.pkgs[dep].version, "compatible"
+                                )
+                                assert spec is not None
+                                is_modified = True
                         else:
                             assert mode == VersionConsistent.STRICT
-                            for spec in specs:
-                                version_spec = manager.parse_version_spec(
-                                    spec.version_spec
-                                )
-                                if version_spec.lowerbound != dep_version:
-                                    is_modified = True
-                                    spec.version_spec = manager.update_version_spec(
-                                        spec.version_spec, dep_version
-                                    )
-                    elif specs != thirdparty_pkgs[dep]:
+                            newspec = spec.update_version(
+                                self.pkgs[dep].version, "strict"
+                            )
+                            if newspec is not None:
+                                is_modified = True
+
+                        if is_modified:
+                            deps[dep] = spec
+                    elif spec != thirdparty_pkgs[dep]:
                         deps[dep] = thirdparty_pkgs[dep]
                         is_modified = True
 

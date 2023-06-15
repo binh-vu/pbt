@@ -1,9 +1,9 @@
-from functools import partial
 import os
 import re
 import shutil
 import sys
 from dataclasses import asdict, dataclass
+from functools import partial
 from operator import attrgetter
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,17 +11,16 @@ from typing import Dict, List, Optional, Union, cast
 
 import pytest
 from loguru import logger
+
 from pbt.config import PBTConfig
-from pbt.package.manager.maturin import Maturin
-from pbt.vcs.git import Git
-from pbt.package import manager
-from pbt.package.registry.pypi import PyPI
-
-from pbt.package.package import DepConstraint, Package, PackageType
-from pbt.package.manager.poetry import Poetry
-from pbt.package.manager.manager import PkgManager
-
 from pbt.misc import exec
+from pbt.package import manager
+from pbt.package.manager.manager import PkgManager
+from pbt.package.manager.maturin import Maturin
+from pbt.package.manager.poetry import Poetry
+from pbt.package.package import Package, PackageType
+from pbt.package.registry.pypi import PyPI
+from pbt.vcs.git import Git
 from tests.mockups import PyPIMockUp
 
 File = str

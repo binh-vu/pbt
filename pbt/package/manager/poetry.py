@@ -1,19 +1,21 @@
-import re
 import os
+import re
 import shutil
-import semver
 from contextlib import contextmanager
 from operator import attrgetter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, cast
 
+import semver
 from loguru import logger
+from tomlkit.api import document, dumps, inline_table, loads, nl, table
+from tomlkit.items import Array, KeyType, SingleKey, Trivia
+
 from pbt.config import PBTConfig
 from pbt.misc import ExecProcessError, NewEnvVar, cache_method, exec
+from pbt.package.dependency_specification import DependencySpecification
 from pbt.package.manager.python import Pep518PkgManager
-from pbt.package.package import DepConstraint, DepConstraints, Package, PackageType
-from tomlkit.api import document, dumps, inline_table, loads, nl, table
-from tomlkit.items import Array, KeyType, Trivia, SingleKey
+from pbt.package.package import Package, PackageType
 
 
 class Poetry(Pep518PkgManager):
@@ -22,6 +24,7 @@ class Poetry(Pep518PkgManager):
             cfg, pkg_type=PackageType.Poetry, backend="poetry.core.masonry.api"
         )
         self.passthrough_envs = self.passthrough_envs + ["POETRY_VIRTUALENVS_PATH"]
+        self.poetry_spec_format = PoetrySpecFormat()
 
     @cache_method()
     def get_poetry_version(self, path: str) -> str:
@@ -39,7 +42,7 @@ class Poetry(Pep518PkgManager):
         self,
         pkg: Package,
         skip_deps: List[str],
-        additional_deps: Dict[str, DepConstraints],
+        additional_deps: Dict[str, DependencySpecification],
         disable: bool = False,
     ):
         """Temporary mask out selected dependencies of the package. This is usually used for installing the package.
@@ -67,7 +70,7 @@ class Poetry(Pep518PkgManager):
 
         for dep, specs in additional_deps.items():
             if dep not in doc["tool"]["poetry"]["dependencies"]:
-                doc["tool"]["poetry"]["dependencies"][dep] = self.serialize_dep_specs(
+                doc["tool"]["poetry"]["dependencies"][dep] = self.serialize_dep_spec(
                     specs
                 )
 
@@ -178,13 +181,13 @@ class Poetry(Pep518PkgManager):
 
                 tbl = table()
                 for dep, specs in pkg.dependencies.items():
-                    tbl.add(dep, self.serialize_dep_specs(specs))
+                    tbl.add(dep, self.serialize_dep_spec(specs))
                 doc.add(nl())
                 doc.add(SingleKey("tool.poetry.dependencies", t=KeyType.Bare), tbl)
 
                 tbl = table()
                 for dep, specs in pkg.dev_dependencies.items():
-                    tbl.add(dep, self.serialize_dep_specs(specs))
+                    tbl.add(dep, self.serialize_dep_spec(specs))
                 doc.add(nl())
                 doc.add(SingleKey("tool.poetry.dev-dependencies", t=KeyType.Bare), tbl)
 
@@ -231,7 +234,7 @@ class Poetry(Pep518PkgManager):
                 (pkg.dependencies, "dependencies"),
                 (pkg.dev_dependencies, "dev-dependencies"),
             ]:
-                dependencies: Dict[str, DepConstraints]
+                dependencies: Dict[str, DependencySpecification]
                 for dep, specs in dependencies.items():
                     is_dep_modified = False
                     if dep not in doc["tool"]["poetry"][corr_key]:
@@ -245,7 +248,7 @@ class Poetry(Pep518PkgManager):
                             is_dep_modified = True
 
                     if is_dep_modified:
-                        doc["tool"]["poetry"][corr_key][dep] = self.serialize_dep_specs(
+                        doc["tool"]["poetry"][corr_key][dep] = self.serialize_dep_spec(
                             specs
                         )
                         is_modified = True
@@ -258,7 +261,7 @@ class Poetry(Pep518PkgManager):
         package: Package,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[Dict[str, DependencySpecification]] = None,
         virtualenv: Optional[Path] = None,
     ):
         skip_deps = skip_deps or []
@@ -320,52 +323,58 @@ class Poetry(Pep518PkgManager):
             env=self.passthrough_envs,
         )
 
-    def parse_dep_spec(self, spec: Union[str, dict]) -> DepConstraint:
-        if isinstance(spec, str):
-            constraint = f"python=* markers="
-            return DepConstraint(version_spec=spec, constraint=constraint)
-        elif isinstance(spec, dict):
-            if "version" not in spec:
-                if "url" in spec:
-                    # try to figure out the version from the URL if possible, otherwise, use 1.0.0
-                    m = re.search(r"\d+.\d+.\d+", spec["url"])
-                    if m is not None:
-                        version_spec = f"=={m.group()}"
-                    else:
-                        version_spec = "==1.0.0"
-                else:
-                    raise NotImplementedError(
-                        f"Not support specify dependency outside of Pypi yet. But found spec {spec}"
-                    )
-            else:
-                version_spec = spec["version"]
+    def parse_dep_spec(self, spec: Union[str, dict]) -> DependencySpecification:
+        return self.poetry_spec_format.deserialize(spec)
 
-            constraint = (
-                f"python={spec.get('python', '*')} markers={spec.get('markers', '')}"
-            )
-            origin_spec = spec.copy()
-            if "version" in origin_spec:
-                origin_spec.pop("version")
+    def serialize_dep_spec(self, spec: DependencySpecification):
+        return self.poetry_spec_format.serialize(spec)
 
-            return DepConstraint(
-                version_spec=version_spec,
-                constraint=constraint,
-                version_spec_field="version",
-                origin_spec=origin_spec,
-            )
+    # def parse_dep_spec(self, spec: Union[str, dict]) -> DepConstraint:
+    #     if isinstance(spec, str):
+    #         constraint = f"python=* markers="
+    #         return DepConstraint(version_spec=spec, constraint=constraint)
+    #     elif isinstance(spec, dict):
+    #         if "version" not in spec:
+    #             if "url" in spec:
+    #                 # try to figure out the version from the URL if possible, otherwise, use 1.0.0
+    #                 m = re.search(r"\d+.\d+.\d+", spec["url"])
+    #                 if m is not None:
+    #                     version_spec = f"=={m.group()}"
+    #                 else:
+    #                     version_spec = "==1.0.0"
+    #             else:
+    #                 raise NotImplementedError(
+    #                     f"Not support specify dependency outside of Pypi yet. But found spec {spec}"
+    #                 )
+    #         else:
+    #             version_spec = spec["version"]
 
-    def serialize_dep_specs(self, specs: DepConstraints):
-        items = []
-        for spec in specs:
-            if spec.origin_spec is None:
-                item = spec.version_spec
-            else:
-                item = inline_table()
-                item[cast(str, spec.version_spec_field)] = spec.version_spec
-                for k, v in spec.origin_spec.items():
-                    item[k] = v
-            items.append(item)
+    #         constraint = (
+    #             f"python={spec.get('python', '*')} markers={spec.get('markers', '')}"
+    #         )
+    #         origin_spec = spec.copy()
+    #         if "version" in origin_spec:
+    #             origin_spec.pop("version")
 
-        if len(items) == 1:
-            return items[0]
-        return Array(items, Trivia(), multiline=True)
+    #         return DepConstraint(
+    #             version_spec=version_spec,
+    #             constraint=constraint,
+    #             version_spec_field="version",
+    #             origin_spec=origin_spec,
+    #         )
+
+    # def serialize_dep_spec(self, specs: DepConstraints):
+    #     items = []
+    #     for spec in specs:
+    #         if spec.origin_spec is None:
+    #             item = spec.version_spec
+    #         else:
+    #             item = inline_table()
+    #             item[cast(str, spec.version_spec_field)] = spec.version_spec
+    #             for k, v in spec.origin_spec.items():
+    #                 item[k] = v
+    #         items.append(item)
+
+    #     if len(items) == 1:
+    #         return items[0]
+    #     return Array(items, Trivia(), multiline=True)

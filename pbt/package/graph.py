@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import chain
-import networkx as nx
 from typing import Dict, Iterable, List, Optional, Type, Union
 
-from pbt.package.package import Package, DepConstraints, PackageType
+import networkx as nx
+
+from pbt.package.dependency_specification import DependencySpecification
+from pbt.package.package import Package, PackageType
 
 
 @dataclass
@@ -13,7 +15,7 @@ class ThirdPartyPackage:
     name: str
     type: PackageType
     # mapping from source package that use this package to the version the source package depends on
-    invert_dependencies: Dict[str, DepConstraints]
+    invert_dependencies: Dict[str, DependencySpecification]
 
 
 class PkgGraph:
@@ -41,7 +43,7 @@ class PkgGraph:
                 (pkg.dependencies, False),
                 (pkg.dev_dependencies, True),
             ]:
-                deps: Dict[str, DepConstraints]
+                deps: Dict[str, DependencySpecification]
                 for dep, specs in deps.items():
                     if not g.has_node(dep):
                         assert dep not in pkgs

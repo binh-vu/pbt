@@ -1,18 +1,20 @@
-from abc import abstractmethod
-from contextlib import contextmanager
 import glob
 import os
-from pathlib import Path
 import shutil
+from abc import abstractmethod
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Callable, Dict, List, Literal, Optional, Set, Union, cast
 
 from loguru import logger
+from tomlkit.api import dumps, loads
+
 from pbt.config import PBTConfig
-from pbt.misc import cache_method, exec
-from pbt.package.manager.manager import PkgManager, build_cache
-from pbt.package.package import DepConstraints, Package, PackageType
-from tomlkit.api import loads, dumps
 from pbt.diff import Diff, diff_db
+from pbt.misc import cache_method, exec
+from pbt.package.dependency_specification import DependencySpecification
+from pbt.package.manager.manager import PkgManager, build_cache
+from pbt.package.package import Package, PackageType
 
 
 class PythonPkgManager(PkgManager):
@@ -40,7 +42,7 @@ class PythonPkgManager(PkgManager):
         """
         self.managers = managers
 
-    def get_fixed_version_pkgs(self):
+    def get_pinned_version_pkgs(self):
         return self.fixed_version_pkgs
 
     def compute_pkg_hash(self, pkg: Package, target: Optional[str] = None) -> str:
@@ -143,7 +145,7 @@ class PythonPkgManager(PkgManager):
         self,
         pkg: Package,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[Dict[str, DependencySpecification]] = None,
         release: bool = True,
         clean_dist: bool = True,
     ):
@@ -186,7 +188,7 @@ class PythonPkgManager(PkgManager):
         package: Package,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[Dict[str, DependencySpecification]] = None,
         virtualenv: Optional[Path] = None,
     ):
         """Install the package, assuming the the specification is updated. Note that if the package is phantom, only the dependencies are installed.
@@ -237,7 +239,7 @@ class PythonPkgManager(PkgManager):
         self,
         pkg: Package,
         skip_deps: List[str],
-        additional_deps: Dict[str, DepConstraints],
+        additional_deps: Dict[str, DependencySpecification],
         disable: bool = False,
     ):
         """Temporary change the dependencies of the package.

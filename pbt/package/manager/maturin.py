@@ -1,17 +1,21 @@
 import os
+import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-import shutil
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 from loguru import logger
+from tomlkit.api import array, document, dumps, inline_table, loads, nl, table
+
 from pbt.config import PBTConfig
 from pbt.misc import NewEnvVar, exec
-from pbt.package.manager.manager import DepConstraints
+from pbt.package.dependency_specification import (
+    DependencySpecification,
+    Pep508SpecFormat,
+)
 from pbt.package.manager.python import Pep518PkgManager
-from pbt.package.package import DepConstraint, Package, PackageType
-from tomlkit.api import array, document, dumps, inline_table, loads, nl, table
+from pbt.package.package import Package, PackageType
 
 if TYPE_CHECKING:
     from pbt.package.manager.poetry import Poetry
@@ -27,6 +31,8 @@ class MaturinPackage(Package):
 class Maturin(Pep518PkgManager):
     def __init__(self, cfg: PBTConfig) -> None:
         super().__init__(cfg, pkg_type=PackageType.Maturin, backend="maturin")
+
+        self.pep508 = Pep508SpecFormat()
 
     def load(self, dir: Path) -> MaturinPackage:
         try:
@@ -103,7 +109,7 @@ class Maturin(Pep518PkgManager):
                     "optional-dependencies",
                 ),
             ]:
-                dependencies: Dict[str, DepConstraints]
+                dependencies: Dict[str, DependencySpecification]
                 is_dep_modified = False
                 for dep, specs in dependencies.items():
                     if dep not in old_dependencies or old_dependencies[dep] != specs:
@@ -113,7 +119,7 @@ class Maturin(Pep518PkgManager):
                     is_modified = True
                     lst = array(
                         [
-                            dep + " " + self.serialize_dep_specs(specs)
+                            dep + " " + self.serialize_dep_spec(specs)
                             for dep, specs in dependencies.items()
                         ]  # type: ignore
                     )
@@ -146,36 +152,36 @@ class Maturin(Pep518PkgManager):
                 else:
                     os.remove(pkg.location / "pyproject.toml.backup")
 
-    def parse_dep_spec(self, v: str) -> Tuple[str, DepConstraints]:
+    def parse_dep_spec(self, v: str) -> Tuple[str, DependencySpecification]:
         """Parse a dependency specification.
 
         It does not support PEP508 but only a simple syntax: `<name> <version_rule>`.
         Note: the space is important.
         """
-        name, version = v.split(" ", 1)
-        # do it here to make sure we can parse this version
-        self.parse_version_spec(version)
-        constraint = f"python=* markers="
-        return name, [DepConstraint(version_spec=version, constraint=constraint)]
+        depspec = self.pep508.deserialize(v)
+        return depspec.get_dep_name(), depspec
 
-    def serialize_dep_specs(self, specs: DepConstraints) -> str:
-        # not implement all cases yet
-        assert len(specs) == 1
-        (spec,) = specs
-        if spec.origin_spec is None:
-            prefix = ""
-        else:
-            if len(spec.origin_spec) == 1 and "extras" in spec.origin_spec:
-                prefix = f"[{''.join(spec.origin_spec['extras'])}]"
-            else:
-                raise NotImplementedError(
-                    "Don't support all cases of origin_spec yet: {}"
-                    % str(spec.origin_spec)
-                )
-        version_spec = self.parse_version_spec(spec.version_spec)
-        return (
-            prefix + (" " if len(prefix) > 0 else "") + version_spec.to_pep508_string()
-        )
+    def serialize_dep_spec(self, spec: DependencySpecification) -> str:
+        return self.pep508.serialize(spec)
+
+    # def serialize_dep_specs(self, specs: DepConstraints) -> str:
+    #     # not implement all cases yet
+    #     assert len(specs) == 1
+    #     (spec,) = specs
+    #     if spec.origin_spec is None:
+    #         prefix = ""
+    #     else:
+    #         if len(spec.origin_spec) == 1 and "extras" in spec.origin_spec:
+    #             prefix = f"[{''.join(spec.origin_spec['extras'])}]"
+    #         else:
+    #             raise NotImplementedError(
+    #                 "Don't support all cases of origin_spec yet: {}"
+    #                 % str(spec.origin_spec)
+    #             )
+    #     version_spec = self.parse_version_spec(spec.version_spec)
+    #     return (
+    #         prefix + (" " if len(prefix) > 0 else "") + version_spec.to_pep508_string()
+    #     )
 
     def clean(self, pkg: Package):
         super().clean(pkg)
@@ -191,7 +197,7 @@ class Maturin(Pep518PkgManager):
         pkg: MaturinPackage,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[Dict[str, DependencySpecification]] = None,
         virtualenv: Optional[Path] = None,
     ):
         skip_deps = skip_deps or []
@@ -252,7 +258,7 @@ class Maturin(Pep518PkgManager):
         self,
         pkg: Package,
         skip_deps: List[str],
-        additional_deps: Dict[str, DepConstraints],
+        additional_deps: Dict[str, DependencySpecification],
         disable: bool = False,
     ):
         """Temporary mask out selected dependencies of the package. This is usually used for installing the package.
@@ -307,7 +313,7 @@ class Maturin(Pep518PkgManager):
         for dep, specs in additional_deps.items():
             if dep not in dep_name2lineno:
                 doc["project"]["dependencies"].append(
-                    dep + " " + self.serialize_dep_specs(specs)
+                    dep + " " + self.serialize_dep_spec(specs)
                 )
 
         with open(self.cfg.pkg_cache_dir(pkg) / "pyproject.modified.toml", "w") as f:
