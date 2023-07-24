@@ -2,12 +2,11 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Set, Union
-from loguru import logger
 
 import orjson
-from pbt.package.package import Package
+from loguru import logger
 from pbt.misc import cache_method, exec
-
+from pbt.package.package import Package
 
 PBT_CONFIG_FILE_NAME = "pbtconfig.json"
 PBT_LOCK_FILE_NAME = "pbt.lock"
@@ -102,6 +101,8 @@ class PBTConfig:
             ignore_directory_names = set()
 
         logger.info("Root directory: {}", cwd)
+        logger.info("Ignore directories: {}", ignore_directories)
+        logger.info("Ignore directory names: {}", ignore_directory_names)
 
         if "python_path" not in cfg:
             # try use python_path from the environment variable: `PBT_PYTHON`

@@ -1,18 +1,20 @@
-from abc import abstractmethod
-from contextlib import contextmanager
 import glob
 import os
-from pathlib import Path
 import shutil
+from abc import abstractmethod
+from contextlib import contextmanager
+from pathlib import Path
+from time import time
 from typing import Callable, Dict, List, Literal, Optional, Set, Union, cast
 
 from loguru import logger
 from pbt.config import PBTConfig
+from pbt.diff import Diff, diff_db
 from pbt.misc import cache_method, exec
 from pbt.package.manager.manager import PkgManager, build_cache
 from pbt.package.package import DepConstraints, Package, PackageType
-from tomlkit.api import loads, dumps
-from pbt.diff import Diff, diff_db
+from tomlkit.api import dumps, loads
+from tqdm.auto import tqdm
 
 
 class PythonPkgManager(PkgManager):
@@ -286,18 +288,29 @@ class Pep518PkgManager(PythonPkgManager):
         outs = []
         root = root.resolve()
 
-        stack = [root]
-        while len(stack) > 0:
-            dir = stack.pop()
-            if (
-                dir.name.startswith(".")
-                or dir.name in ignore_dirnames
-                or dir in ignore_dirs
-            ):
-                continue
-            if (dir / "pyproject.toml").exists():
-                outs.append(dir)
-            stack.extend([subdir for subdir in dir.iterdir() if subdir.is_dir()])
+        with tqdm(desc="Discovering packages", total=1) as pbar:
+            stack = [root]
+            while len(stack) > 0:
+                dir = stack.pop()
+                pbar.update(1)
+
+                if (
+                    dir.name.startswith(".")
+                    or dir.name in ignore_dirnames
+                    or dir in ignore_dirs
+                ):
+                    continue
+                if (dir / "pyproject.toml").exists():
+                    outs.append(dir)
+
+                start = time()
+                newdirs = [subdir for subdir in dir.iterdir() if subdir.is_dir()]
+                end = time()
+                if end - start > 1:
+                    logger.warning("Slow directory listing: {}", dir)
+
+                stack.extend(newdirs)
+                pbar.total += len(newdirs)
 
         return outs
 
