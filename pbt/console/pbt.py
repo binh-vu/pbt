@@ -1,26 +1,26 @@
 import os
+import shutil
 import zipfile
 from pathlib import Path
-import shutil
 from typing import Dict, List, Literal, Tuple, cast
 
 import click
-from loguru import logger
 import orjson
+from loguru import logger
 
 from pbt.config import PBTConfig
-from pbt.package.manager.poetry import Poetry
+from pbt.misc import exec
+from pbt.package.manager.manager import PkgManager, build_cache
 from pbt.package.manager.maturin import Maturin
+from pbt.package.manager.poetry import Poetry
 from pbt.package.manager.python import PythonPkgManager
 from pbt.package.package import PackageType
 from pbt.package.pipeline import BTPipeline, VersionConsistent
 from pbt.package.registry.pypi import PyPI
-from pbt.package.manager.manager import PkgManager, build_cache
-from pbt.misc import exec
 
 
 def init(
-    cwd: str, packages: List[str], verbose: bool
+    cwd: str, packages: List[str], verbose: bool, ignore_invalid_pkgs: bool = False
 ) -> Tuple[BTPipeline, PBTConfig, List[str]]:
     cfg = PBTConfig.from_dir(cwd)
     managers: Dict[PackageType, PkgManager] = {
@@ -32,7 +32,7 @@ def init(
             v.set_package_managers(managers)
 
     pl = BTPipeline(cfg, managers=managers)
-    pl.discover()
+    pl.discover(ignore_invalid_pkgs)
 
     if len(packages) == 0:
         pkgs = set(pl.pkgs.keys())
@@ -315,7 +315,7 @@ def obtain_prebuilt_binary(
     source: Literal["build", "pypi"] = "build",
     clean: bool = False,
 ):
-    pl, cfg, pkgs = init(cwd, [package], verbose)
+    pl, cfg, pkgs = init(cwd, [package], verbose, ignore_invalid_pkgs=True)
     pkg = pl.pkgs[package]
 
     manager = pl.managers[pkg.type]

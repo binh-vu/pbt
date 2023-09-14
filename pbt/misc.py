@@ -1,12 +1,17 @@
 import functools
 import os
-from pathlib import Path
 import subprocess
-from typing import Callable, List, Sequence, Union, Optional
+from pathlib import Path
+from typing import Callable, List, Optional, Sequence, Union
+
 from typing_extensions import TypedDict
 
 
 class ExecProcessError(Exception):
+    pass
+
+
+class InvalidPackageError(Exception):
     pass
 
 

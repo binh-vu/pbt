@@ -3,17 +3,14 @@ from operator import itemgetter
 from typing import Dict, List, Optional, Set
 
 from loguru import logger
+
 from pbt.config import PBTConfig
 from pbt.diff import RemoteDiff
+from pbt.misc import InvalidPackageError
 from pbt.package.graph import PkgGraph, ThirdPartyPackage
 from pbt.package.manager.manager import PkgManager, build_cache
-from pbt.package.package import (
-    Package,
-    PackageType,
-    DepConstraint,
-)
+from pbt.package.package import DepConstraint, Package, PackageType
 from pbt.package.registry.registry import PkgRegistry
-from loguru import logger
 
 
 class VersionConsistent(enum.Enum):
@@ -33,8 +30,12 @@ class BTPipeline:
         self.graph = PkgGraph()
         self.pkgs: Dict[str, Package] = {}
 
-    def discover(self):
-        """Discover packages in the project."""
+    def discover(self, ignore_invalid_pkgs: bool = False):
+        """Discover packages in the project.
+
+        Args:
+            ignore_invalid_pkgs: whether to ignore invalid packages
+        """
         logger.debug("Discovering packages in the project...")
         pkgs = {}
         for manager in self.managers.values():
@@ -43,7 +44,13 @@ class BTPipeline:
             ):
                 if not manager.is_package_directory(fpath):
                     continue
-                pkg = manager.load(fpath)
+                try:
+                    pkg = manager.load(fpath)
+                except InvalidPackageError as e:
+                    if not ignore_invalid_pkgs:
+                        raise e
+                    logger.warning(f"Package {fpath} is invalid. Ignore it. Error: {e}")
+                    continue
                 if pkg.name in pkgs:
                     raise RuntimeError(
                         f"Duplicate package {pkg.name}: found in {pkg.location} and {pkgs[pkg.name].location}"

@@ -1,17 +1,18 @@
 import os
+import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-import shutil
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 from loguru import logger
+from tomlkit.api import array, document, dumps, inline_table, loads, nl, table
+
 from pbt.config import PBTConfig
-from pbt.misc import NewEnvVar, exec
+from pbt.misc import InvalidPackageError, NewEnvVar, exec
 from pbt.package.manager.manager import DepConstraints
 from pbt.package.manager.python import Pep518PkgManager
 from pbt.package.package import DepConstraint, Package, PackageType
-from tomlkit.api import array, document, dumps, inline_table, loads, nl, table
 
 if TYPE_CHECKING:
     from pbt.package.manager.poetry import Poetry
@@ -241,7 +242,7 @@ class Maturin(Pep518PkgManager):
             return opts[0]
 
         if len(opts) > 1:
-            raise NotImplementedError(
+            raise InvalidPackageError(
                 "Haven't support multiple options-dependencies yet"
             )
 

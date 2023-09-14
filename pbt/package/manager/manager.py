@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Sequence, Set, Tuple, Union
 
 import semver
+
 from pbt.config import PBTConfig
 from pbt.misc import cache_func, cache_method
 from pbt.package.package import DepConstraint, DepConstraints, Package, VersionSpec
