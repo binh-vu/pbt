@@ -3,7 +3,8 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Union, NamedTuple
+from typing import List, NamedTuple, Optional, Union
+
 from pbt.misc import exec
 
 

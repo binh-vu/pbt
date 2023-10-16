@@ -1,34 +1,33 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
-from distutils.version import Version
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
-from typing_extensions import TypeGuard
+from typing import Optional
 
 from semver import VersionInfo
-from loguru import logger
 
 
 @dataclass
 class Package:
     name: str
     version: str
-    dependencies: Dict[str, DepConstraints]
-    dev_dependencies: Dict[str, DepConstraints]
+    dependencies: dict[str, DepConstraints]
+    extra_dependencies: dict[str, dict[str, DepConstraints]]
 
     # below are properties that can be from the package file, but may be modified heavily
     # so that you should never use them to override previous package definition
     type: PackageType
     location: Path
     # list of glob patterns to be included in the final package
-    include: List[str]
+    include: list[str]
     # a list of glob patterns to be excluded in the final package
-    exclude: List[str]
+    exclude: list[str]
 
-    def get_all_dependency_names(self) -> List[str]:
+    def get_all_dependency_names(self) -> list[str]:
         out = list(self.dependencies.keys())
-        out.extend(self.dev_dependencies.keys())
+        for extra, deps in self.extra_dependencies.items():
+            out.extend(deps.keys())
         return out
 
 
@@ -62,7 +61,7 @@ class DepConstraint:
     # an identifier for the condition that this version is applicable to.
     # none mean there is no other constraint.
     constraint: Optional[str] = None
-    # name of the rule field in origin specification
+    # name of the rule field in origin specification, usually it's 'version'
     # none if the spec is just a string
     version_spec_field: Optional[str] = None
     # the original specification without the version
@@ -72,7 +71,7 @@ class DepConstraint:
 
 # see: https://python-poetry.org/docs/dependency-specification/
 # the constraints always sorted by constraint
-DepConstraints = List[DepConstraint]
+DepConstraints = list[DepConstraint]
 
 
 @dataclass

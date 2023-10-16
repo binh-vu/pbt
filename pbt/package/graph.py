@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import chain
-import networkx as nx
 from typing import Dict, Iterable, List, Optional, Type, Union
 
-from pbt.package.package import Package, DepConstraints, PackageType
+import networkx as nx
+
+from pbt.package.package import DepConstraints, Package, PackageType
 
 
 @dataclass
@@ -39,7 +40,7 @@ class PkgGraph:
         for pkg in pkgs.values():
             for deps, is_dev in [
                 (pkg.dependencies, False),
-                (pkg.dev_dependencies, True),
+                (pkg.extra_dependencies, True),
             ]:
                 deps: Dict[str, DepConstraints]
                 for dep, specs in deps.items():

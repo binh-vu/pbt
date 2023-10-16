@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import shutil
 from contextlib import contextmanager
@@ -11,21 +13,16 @@ from tomlkit.api import array, document, dumps, inline_table, loads, nl, table
 from pbt.config import PBTConfig
 from pbt.misc import InvalidPackageError, NewEnvVar, exec
 from pbt.package.manager.manager import DepConstraints
-from pbt.package.manager.python import Pep518PkgManager
+from pbt.package.manager.python import Pep518PkgManager, PythonPackage
 from pbt.package.package import DepConstraint, Package, PackageType
-
-if TYPE_CHECKING:
-    from pbt.package.manager.poetry import Poetry
 
 
 @dataclass
-class MaturinPackage(Package):
-    """Temporary class until we fix the optionals dependency"""
-
-    optional_dep_name: Optional[str] = None
+class MaturinPackage(PythonPackage):
+    pass
 
 
-class Maturin(Pep518PkgManager):
+class Maturin(Pep518PkgManager[MaturinPackage]):
     def __init__(self, cfg: PBTConfig) -> None:
         super().__init__(cfg, pkg_type=PackageType.Maturin, backend="maturin")
 
@@ -43,12 +40,17 @@ class Maturin(Pep518PkgManager):
                     k, specs = self.parse_dep_spec(item)
                     dependencies[k] = specs
 
-                dev_dependencies = {}
-                opt = self.get_optional_dependency_name(project_cfg)
-                if opt is not None:
-                    for item in project_cfg["project"]["optional-dependencies"][opt]:
-                        k, specs = self.parse_dep_spec(item)
-                        dev_dependencies[k] = specs
+                extra_dependencies = {}
+                extra_self_reference_deps = {}
+                for extra, items in project_cfg["project"]["optional-dependencies"].items():
+                    extra_dependencies[extra] = {
+                        (r := self.parse_dep_spec(item))[0]: r[1]
+                        for item in items
+                    }
+
+                    if name in extra_dependencies[extra]:
+                        assert len(items) == 1
+                        extra_self_reference_deps[extra] = items[0]
 
                 # not supported yet in pep-621
                 # https://peps.python.org/pep-0621/#specify-files-to-include-when-building
@@ -67,12 +69,12 @@ class Maturin(Pep518PkgManager):
             name=name,
             version=version,
             dependencies=dependencies,
-            dev_dependencies=dev_dependencies,
+            extra_dependencies=extra_dependencies,
+            extra_self_reference_deps=extra_self_reference_deps,
             type=PackageType.Maturin,
             location=dir,
             include=include,
             exclude=exclude,
-            optional_dep_name=opt,
         )
 
     def save(self, pkg: Package):
@@ -96,37 +98,50 @@ class Maturin(Pep518PkgManager):
                 doc["project"]["version"] = pkg.version
                 is_modified = True
 
-            for dependencies, old_dependencies, corr_key in [
-                (pkg.dependencies, old_pkg.dependencies, "dependencies"),
-                (
-                    pkg.dev_dependencies,
-                    old_pkg.dev_dependencies,
-                    "optional-dependencies",
-                ),
-            ]:
-                dependencies: Dict[str, DepConstraints]
-                is_dep_modified = False
-                for dep, specs in dependencies.items():
-                    if dep not in old_dependencies or old_dependencies[dep] != specs:
-                        is_dep_modified = True
-                        break
-                if is_dep_modified:
+            is_dep_modified = False
+            for dep, specs in pkg.dependencies.items():
+                if dep not in old_pkg.dependencies or old_pkg.dependencies[dep] != specs:
+                    is_dep_modified = True
+                    break
+            if is_dep_modified:
+                is_modified = True
+                lst = array(
+                    [
+                        dep + " " + self.serialize_dep_specs(specs)
+                        for dep, specs in pkg.dependencies.items()
+                    ]  # type: ignore
+                )
+                lst.multiline(True)
+                doc["project"]["dependencies"] = lst
+            
+            for extra, extra_deps in pkg.extra_dependencies.items():
+                if extra not in old_pkg.extra_dependencies:
                     is_modified = True
-                    lst = array(
+                    doc["project"]["optional-dependencies"][extra] = array(
                         [
                             dep + " " + self.serialize_dep_specs(specs)
-                            for dep, specs in dependencies.items()
+                            for dep, specs in extra_deps.items()
                         ]  # type: ignore
                     )
-                    lst.multiline(True)
-                    if corr_key == "dependencies":
-                        doc["project"][corr_key] = lst
-                    else:
-                        opt = self.get_optional_dependency_name(doc)
-                        assert (
-                            opt is not None
-                        ), "The dep is modified, we should have optional-dependencies"
-                        doc["project"][corr_key][opt] = lst
+                else:
+                    is_dep_modified = False
+                    for dep, specs in extra_deps.items():
+                        if (
+                            dep not in old_pkg.extra_dependencies[extra]
+                            or old_pkg.extra_dependencies[extra][dep] != specs
+                        ):
+                            is_dep_modified = True
+                            break
+                    if is_dep_modified:
+                        is_modified = True
+                        lst = array(
+                            [
+                                dep + " " + self.serialize_dep_specs(specs)
+                                for dep, specs in extra_deps.items()
+                            ]  # type: ignore
+                        )
+                        lst.multiline(True)
+                        doc["project"]["optional-dependencies"][extra] = lst
 
         if is_modified:
             success = False
@@ -192,7 +207,7 @@ class Maturin(Pep518PkgManager):
         pkg: MaturinPackage,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[dict[str, DepConstraints]] = None,
         virtualenv: Optional[Path] = None,
     ):
         skip_deps = skip_deps or []
@@ -253,7 +268,7 @@ class Maturin(Pep518PkgManager):
         self,
         pkg: Package,
         skip_deps: List[str],
-        additional_deps: Dict[str, DepConstraints],
+        additional_deps: dict[str, DepConstraints],
         disable: bool = False,
     ):
         """Temporary mask out selected dependencies of the package. This is usually used for installing the package.

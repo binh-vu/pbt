@@ -1,11 +1,11 @@
-from pbt.package.package import DepConstraint
-from tests.conftest import pylib, Repo
 from pbt.package.graph import PkgGraph
+from pbt.package.package import DepConstraint
+from tests.conftest import Repo, pylib
 
 
 def test_from_pkgs(repo1: Repo):
     packages = repo1.packages
-    packages["lib0"].dev_dependencies["black"] = [
+    packages["lib0"].extra_dependencies["black"] = [
         DepConstraint(
             version_spec="^21.11b1",
             constraint="allow-prereleases=true",
@@ -33,7 +33,7 @@ def test_from_pkgs(repo1: Repo):
 
 def test_dependencies(repo1: Repo):
     packages = repo1.packages
-    packages["lib0"].dev_dependencies["black"] = [
+    packages["lib0"].extra_dependencies["black"] = [
         DepConstraint(
             version_spec="^21.11b1",
             constraint="allow-prereleases=true",

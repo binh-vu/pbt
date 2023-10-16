@@ -1,9 +1,9 @@
-from functools import partial
 import os
 import re
 import shutil
 import sys
 from dataclasses import asdict, dataclass
+from functools import partial
 from operator import attrgetter
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,17 +11,16 @@ from typing import Dict, List, Optional, Union, cast
 
 import pytest
 from loguru import logger
+
 from pbt.config import PBTConfig
-from pbt.package.manager.maturin import Maturin
-from pbt.vcs.git import Git
-from pbt.package import manager
-from pbt.package.registry.pypi import PyPI
-
-from pbt.package.package import DepConstraint, Package, PackageType
-from pbt.package.manager.poetry import Poetry
-from pbt.package.manager.manager import PkgManager
-
 from pbt.misc import exec
+from pbt.package import manager
+from pbt.package.manager.manager import PkgManager
+from pbt.package.manager.maturin import Maturin
+from pbt.package.manager.poetry import Poetry
+from pbt.package.package import DepConstraint, Package, PackageType
+from pbt.package.registry.pypi import PyPI
+from pbt.vcs.git import Git
 from tests.mockups import PyPIMockUp
 
 File = str
@@ -40,7 +39,7 @@ class Repo:
             pkg.name = tmp.name
             pkg.version = tmp.version
             pkg.dependencies = tmp.dependencies
-            pkg.dev_dependencies = tmp.dev_dependencies
+            pkg.extra_dependencies = tmp.extra_dependencies
             pkg.include = tmp.include
             pkg.exclude = tmp.exclude
 
@@ -94,7 +93,7 @@ def pylib(cwd, name, version, deps=None, dev_deps=None):
         location=cwd / name,
         version=version,
         dependencies=dependencies,
-        dev_dependencies={k: dcon(v) for k, v in (dev_deps or {}).items()},
+        extra_dependencies={k: dcon(v) for k, v in (dev_deps or {}).items()},
         include=[name],
         exclude=[],
     )

@@ -1,19 +1,23 @@
+from __future__ import annotations
+
 import glob
 import os
 import re
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Sequence, Set, Tuple, Union
+from typing import Generic, List, Literal, Optional, Set, Tuple, TypeVar, Union
 
 import semver
 
 from pbt.config import PBTConfig
-from pbt.misc import cache_func, cache_method
+from pbt.misc import cache_func
 from pbt.package.package import DepConstraint, DepConstraints, Package, VersionSpec
 
+P = TypeVar("P", bound=Package)
 
-class PkgManager(ABC):
+
+class PkgManager(ABC, Generic[P]):
     """A package manager that is responsible for all tasks related to packages such as dicovering, parsing, building, installing, and publishing."""
 
     def __init__(self, cfg: PBTConfig) -> None:
@@ -58,7 +62,7 @@ class PkgManager(ABC):
         return out
 
     @abstractmethod
-    def load(self, dir: Path) -> Package:
+    def load(self, dir: Path) -> P:
         """Load a package from the given directory.
 
         Args:
@@ -67,7 +71,7 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def save(self, package: Package):
+    def save(self, package: P):
         """Save the current configuration of the package
 
         Args:
@@ -76,7 +80,7 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def clean(self, package: Package):
+    def clean(self, package: P):
         """Remove previously installed dependencies and the environment where the package is installed, for a freshly start.
         In addition, this also cleans built artifacts.
 
@@ -86,7 +90,7 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def publish(self, package: Package):
+    def publish(self, package: P):
         """Publish the package to the package registry
 
         Args:
@@ -97,9 +101,9 @@ class PkgManager(ABC):
     @abstractmethod
     def build(
         self,
-        package: Package,
+        package: P,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[dict[str, DepConstraints]] = None,
         release: bool = True,
         clean_dist: bool = True,
     ):
@@ -117,8 +121,8 @@ class PkgManager(ABC):
     @abstractmethod
     def install_dependency(
         self,
-        package: Package,
-        dependency: Package,
+        package: P,
+        dependency: P,
         skip_dep_deps: Optional[List[str]] = None,
     ):
         """Install the given dependency for the given package.
@@ -139,10 +143,10 @@ class PkgManager(ABC):
     @abstractmethod
     def install(
         self,
-        package: Package,
+        package: P,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[dict[str, DepConstraints]] = None,
     ):
         """Install the package, assuming the the specification is updated. Note that if the package is phantom, only the dependencies are installed.
 
@@ -159,7 +163,7 @@ class PkgManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def compute_pkg_hash(self, pkg: Package, target: Optional[str] = None) -> str:
+    def compute_pkg_hash(self, pkg: P, target: Optional[str] = None) -> str:
         """Compute hash of package's content.
 
         Args:
@@ -192,7 +196,7 @@ class PkgManager(ABC):
         finally:
             os.rename(file_path + ".tmp", file_path)
 
-    def filter_included_files(self, pkg: Package, files: List[str]) -> List[str]:
+    def filter_included_files(self, pkg: P, files: List[str]) -> List[str]:
         """Filter out the files that are not included in the package, these are files that
         won't affect the content of the package.
 
@@ -243,7 +247,7 @@ class PkgManager(ABC):
                 'compatible' means all versions must be compatible.
                 None means we don't check
         """
-        constraints: Dict[Optional[str], Tuple[VersionSpec, DepConstraint]] = {}
+        constraints: dict[Optional[str], Tuple[VersionSpec, DepConstraint]] = {}
         for specs in lst_specs:
             for spec in specs:
                 version_spec = self.parse_version_spec(spec.version_spec)
@@ -434,7 +438,7 @@ class PkgManager(ABC):
 
         return semver.VersionInfo.parse(version)
 
-    def next_version(self, pkg: Package, rule: Literal["major", "minor", "patch"]):
+    def next_version(self, pkg: P, rule: Literal["major", "minor", "patch"]):
         """Update version of the package if a valid bump rule is provided
 
         Args:

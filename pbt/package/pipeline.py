@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import enum
 from operator import itemgetter
 from typing import Dict, List, Optional, Set
@@ -23,12 +25,12 @@ class VersionConsistent(enum.Enum):
 
 
 class BTPipeline:
-    def __init__(self, cfg: PBTConfig, managers: Dict[PackageType, PkgManager]) -> None:
+    def __init__(self, cfg: PBTConfig, managers: dict[PackageType, PkgManager]) -> None:
         self.root = cfg.cwd
         self.cfg = cfg
         self.managers = managers
         self.graph = PkgGraph()
-        self.pkgs: Dict[str, Package] = {}
+        self.pkgs: dict[str, Package] = {}
 
     def discover(self, ignore_invalid_pkgs: bool = False):
         """Discover packages in the project.
@@ -115,7 +117,7 @@ class BTPipeline:
                 continue
             manager = self.managers[pkg.type]
             is_modified = False
-            for deps in [pkg.dependencies, pkg.dev_dependencies]:
+            for deps in [pkg.dependencies, pkg.extra_dependencies]:
                 for dep, specs in deps.items():
                     if dep in manager.get_fixed_version_pkgs():
                         # skip fixed version packages
@@ -184,12 +186,12 @@ class BTPipeline:
                     if (
                         isinstance(dep, ThirdPartyPackage)
                         and dep.name not in pkg.dependencies
-                        and dep.name not in pkg.dev_dependencies
+                        and dep.name not in pkg.extra_dependencies
                     )
                     or (
                         isinstance(dep, Package)
                         and dep.name not in pkg.dependencies
-                        and dep.name not in pkg.dev_dependencies
+                        and dep.name not in pkg.extra_dependencies
                         and dep.name in self.cfg.use_prebuilt_binaries
                     )
                 }
@@ -212,7 +214,7 @@ class BTPipeline:
                             pkg, dep, skip_dep_deps=dep.get_all_dependency_names()
                         )
 
-    def publish(self, pkg_names: List[str], registries: Dict[PackageType, PkgRegistry]):
+    def publish(self, pkg_names: List[str], registries: dict[PackageType, PkgRegistry]):
         """Publish a package. Check if the package is modified but the version is not changed so
         that we don't forget to update the version of the package.
 

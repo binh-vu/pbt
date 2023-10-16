@@ -1,12 +1,12 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, cast
+
 from pbt.config import PBTConfig
 from pbt.misc import exec
+from pbt.package.manager.manager import PkgManager
 from pbt.package.manager.poetry import Poetry
 from pbt.package.package import Package, PackageType
-
-from pbt.package.manager.manager import PkgManager
 
 
 def test_exec():
@@ -33,7 +33,7 @@ def test_exec():
             include=[],
             exclude=[],
             dependencies={},
-            dev_dependencies={},
+            extra_dependencies={},
         )
         poetry.save(pkg)
         assert exec("poetry env list --full-path", cwd=tmpdir) == []

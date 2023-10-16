@@ -1,22 +1,40 @@
-import re
 import os
+import re
 import shutil
-import semver
 from contextlib import contextmanager
+from dataclasses import dataclass
 from operator import attrgetter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
+import semver
 from loguru import logger
+from tomlkit.api import document, dumps, inline_table, loads, nl, table
+from tomlkit.items import Array, KeyType, SingleKey, Trivia
+
 from pbt.config import PBTConfig
 from pbt.misc import ExecProcessError, NewEnvVar, cache_method, exec
-from pbt.package.manager.python import Pep518PkgManager
+from pbt.package.manager.python import Pep518PkgManager, PythonPackage
 from pbt.package.package import DepConstraint, DepConstraints, Package, PackageType
-from tomlkit.api import document, dumps, inline_table, loads, nl, table
-from tomlkit.items import Array, KeyType, Trivia, SingleKey
 
 
-class Poetry(Pep518PkgManager):
+@dataclass
+class PoetryPackage(PythonPackage):
+    def get_all_dependency_specs(self) -> dict[str, DepConstraints]:
+        """Get all dependency specifications for project specification manipulation purposes such as saving pyproject.toml.
+
+        The reason we have a dedicated function is that optional dependencies in pyproject.toml is removed from the `dependencies`
+        attribute and put into the `extra_dependencies` as by default, they are not installed without specifying the extra explicitly.
+        """
+        deps = self.dependencies.copy()
+        for extra, extra_deps in self.extra_dependencies.items():
+            if extra != "dev":
+                # duplicated should always have the same specs
+                deps.update(extra_deps)
+        return deps
+
+
+class Poetry(Pep518PkgManager[PoetryPackage]):
     def __init__(self, cfg: PBTConfig) -> None:
         super().__init__(
             cfg, pkg_type=PackageType.Poetry, backend="poetry.core.masonry.api"
@@ -37,9 +55,9 @@ class Poetry(Pep518PkgManager):
     @contextmanager  # type: ignore
     def change_dependencies(
         self,
-        pkg: Package,
+        pkg: PoetryPackage,
         skip_deps: List[str],
-        additional_deps: Dict[str, DepConstraints],
+        additional_deps: dict[str, DepConstraints],
         disable: bool = False,
     ):
         """Temporary mask out selected dependencies of the package. This is usually used for installing the package.
@@ -110,26 +128,59 @@ class Poetry(Pep518PkgManager):
                     pkg.location / "poetry.lock",
                 )
 
-    def load(self, dir: Path) -> Package:
+    def load(self, dir: Path) -> PoetryPackage:
         try:
             project_cfg = self.parse_pyproject(dir / "pyproject.toml")
             name = project_cfg["tool"]["poetry"]["name"]
             version = project_cfg["tool"]["poetry"]["version"]
 
-            dependencies = {}
-            dev_dependencies = {}
+            dependencies: dict[str, DepConstraints] = {}
+            dev_dependencies: dict[str, DepConstraints] = {}
 
-            for deps, cfg_key in [
+            # the optional dependencies are put into the extra_dependencies
+            # as they are not install by default
+            optional_deps: dict[str, DepConstraints] = {}
+            tmp: Sequence[tuple[dict[str, DepConstraints], str]] = [
                 (dependencies, "dependencies"),
                 (dev_dependencies, "dev-dependencies"),
-            ]:
+            ]
+            for deps, cfg_key in tmp:
+                deps: dict[str, DepConstraints]
                 for k, vs in project_cfg["tool"]["poetry"].get(cfg_key, {}).items():
                     if not isinstance(vs, list):
                         vs = [vs]
+
                     deps[k] = sorted(
                         (self.parse_dep_spec(v) for v in vs),
                         key=attrgetter("constraint"),
                     )
+
+                    if any(
+                        (v.origin_spec or {}).get("optional", False) for v in deps[k]
+                    ):
+                        assert all(
+                            (v.origin_spec or {}).get("optional", False)
+                            for v in deps[k]
+                        )
+                        assert (
+                            k not in optional_deps
+                        ), f"Dependency {k} should not be specified twice"
+                        assert (
+                            cfg_key == "dependencies"
+                        ), f"Optional dependency {k} should be specified in dependencies"
+                        optional_deps[k] = deps.pop(k)
+
+            extra_dependencies = {
+                "dev": dev_dependencies,
+            }
+
+            assert "dev" not in project_cfg["tool"]["poetry"].get(
+                "extras", {}
+            ), "in poetry we reserve the dev extra for dev dependencies"
+            for extra, vs in project_cfg["tool"]["poetry"].get("extras", {}).items():
+                if not isinstance(vs, list):
+                    vs = [vs]
+                extra_dependencies[extra] = {k: optional_deps[k] for k in vs}
 
             # see https://python-poetry.org/docs/pyproject/#include-and-exclude
             # and https://python-poetry.org/docs/pyproject/#packages
@@ -146,18 +197,19 @@ class Poetry(Pep518PkgManager):
             logger.error("Error while parsing configuration in {}", dir)
             raise
 
-        return Package(
+        return PythonPackage(
             name=name,
             version=version,
             dependencies=dependencies,
-            dev_dependencies=dev_dependencies,
+            extra_dependencies=extra_dependencies,
+            extra_self_reference_deps={},
             type=PackageType.Poetry,
             location=dir,
             include=include,
             exclude=exclude,
         )
 
-    def save(self, pkg: Package, poetry_file: Optional[Path] = None):
+    def save(self, pkg: PoetryPackage, poetry_file: Optional[Path] = None):
         poetry_file = poetry_file or pkg.location / "pyproject.toml"
         if not poetry_file.exists():
             with open(poetry_file, "w") as f:
@@ -177,16 +229,29 @@ class Poetry(Pep518PkgManager):
                 doc.add(SingleKey("tool.poetry", t=KeyType.Bare), tbl)
 
                 tbl = table()
-                for dep, specs in pkg.dependencies.items():
+                for dep, specs in pkg.get_all_dependency_specs().items():
                     tbl.add(dep, self.serialize_dep_specs(specs))
                 doc.add(nl())
                 doc.add(SingleKey("tool.poetry.dependencies", t=KeyType.Bare), tbl)
 
                 tbl = table()
-                for dep, specs in pkg.dev_dependencies.items():
+                # always have extra_dependencies[dev]
+                for dep, specs in pkg.extra_dependencies["dev"].items():
                     tbl.add(dep, self.serialize_dep_specs(specs))
                 doc.add(nl())
                 doc.add(SingleKey("tool.poetry.dev-dependencies", t=KeyType.Bare), tbl)
+
+                if any(
+                    len(dep_specs) > 0
+                    for extra, dep_specs in pkg.extra_dependencies.items()
+                    if extra != "dev"
+                ):
+                    tbl = table()
+                    for extra, dep_specs in pkg.extra_dependencies.items():
+                        if extra != "dev":
+                            tbl.add(extra, [dep for dep in dep_specs])
+                    doc.add(nl())
+                    doc.add(SingleKey("tool.poetry.extras", t=KeyType.Bare), tbl)
 
                 tbl = table()
                 tbl.add("requires", ["poetry-core>=1.0.0"])
@@ -228,10 +293,10 @@ class Poetry(Pep518PkgManager):
                 is_modified = True
 
             for dependencies, corr_key in [
-                (pkg.dependencies, "dependencies"),
-                (pkg.dev_dependencies, "dev-dependencies"),
+                (pkg.get_all_dependency_specs(), "dependencies"),
+                (pkg.extra_dependencies["dev"], "dev-dependencies"),
             ]:
-                dependencies: Dict[str, DepConstraints]
+                dependencies: dict[str, DepConstraints]
                 for dep, specs in dependencies.items():
                     is_dep_modified = False
                     if dep not in doc["tool"]["poetry"][corr_key]:
@@ -249,16 +314,32 @@ class Poetry(Pep518PkgManager):
                             specs
                         )
                         is_modified = True
+
+            for extra, dep_specs in pkg.extra_dependencies.items():
+                if extra == "dev":
+                    continue
+                if extra not in doc["tool"]["poetry"].get("extras", {}):
+                    doc["tool"]["poetry"]["extras"][extra] = [dep for dep in dep_specs]
+                    is_modified = True
+                else:
+                    other_deps = doc["tool"]["poetry"]["extras"][extra]
+                    assert isinstance(other_deps, list)
+                    if set(other_deps) != set(dep_specs):
+                        doc["tool"]["poetry"]["extras"][extra] = [
+                            dep for dep in dep_specs
+                        ]
+                        is_modified = True
+
             return is_modified
 
         self.update_pyproject(poetry_file, update_fn)
 
     def install(
         self,
-        package: Package,
+        package: PoetryPackage,
         include_dev: bool = False,
         skip_deps: Optional[List[str]] = None,
-        additional_deps: Optional[Dict[str, DepConstraints]] = None,
+        additional_deps: Optional[dict[str, DepConstraints]] = None,
         virtualenv: Optional[Path] = None,
     ):
         skip_deps = skip_deps or []
@@ -313,7 +394,7 @@ class Poetry(Pep518PkgManager):
                 env=env,
             )
 
-    def _build_command(self, pkg: Package, release: bool):
+    def _build_command(self, pkg: PoetryPackage, release: bool):
         exec(
             "poetry build",
             cwd=pkg.location,

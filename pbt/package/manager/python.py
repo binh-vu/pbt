@@ -1,21 +1,34 @@
-from abc import abstractmethod
-from contextlib import contextmanager
 import glob
 import os
-from pathlib import Path
 import shutil
-from typing import Callable, Dict, List, Literal, Optional, Set, Union, cast
+from abc import abstractmethod
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Dict, List, Literal, Optional, Set, TypeVar, Union, cast
 
 from loguru import logger
+from tomlkit.api import dumps, loads
+
 from pbt.config import PBTConfig
+from pbt.diff import Diff, diff_db
 from pbt.misc import cache_method, exec
 from pbt.package.manager.manager import PkgManager, build_cache
 from pbt.package.package import DepConstraints, Package, PackageType
-from tomlkit.api import loads, dumps
-from pbt.diff import Diff, diff_db
 
 
-class PythonPkgManager(PkgManager):
+@dataclass
+class PythonPackage(Package):
+    # containing the extra dependencies which are self-references: e.g., all = ['kgdata[test,spark]'].
+    # we do not support mixing self-references and non-self-references in the same extra dependency for now...
+    # mapping from extra name to the original self-reference query e.g., {'all': 'kgdata[test,spark]'}
+    extra_self_reference_deps: dict[str, str]
+
+
+P = TypeVar("P", bound=PythonPackage)
+
+
+class PythonPkgManager(PkgManager[P]):
     """Package Managers for Python should inherit this class."""
 
     def __init__(self, cfg: PBTConfig, pkg_type: PackageType):
@@ -263,7 +276,7 @@ class PythonPkgManager(PkgManager):
         pass
 
 
-class Pep518PkgManager(PythonPkgManager):
+class Pep518PkgManager(PythonPkgManager[P]):
     """A package manager for Python packages that use PEP 518 (pyproject.toml)
 
     Arguments:
@@ -331,11 +344,11 @@ class Pep518PkgManager(PythonPkgManager):
         return self.cache_pyprojects[infile]
 
     def update_pyproject(self, pyproject_file: Path, update_fn: Callable[[dict], bool]):
-        """Update project metadata.
+        """Update project metadata using an in-place modification function.
 
         Arguments:
             pyproject_file: path to the pyproject.toml file
-            update_fn: function to update the document, return true if the document is modified
+            update_fn: function to update the document in-place, return true if the document is modified
         """
         doc = self.parse_pyproject(pyproject_file)
         if update_fn(doc):
